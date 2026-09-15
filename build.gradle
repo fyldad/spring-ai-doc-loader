@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'ru.anblazhnov'
+version = '0.0.1-SNAPSHOT'
+description = 'spring-ai-doc-loader'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+ext {
+    set('springAiVersion', "2.0.1")
+    set('springCloudVersion', "2025.1.3")
+    set('springFunctionsCatalogVersion', "6.0.0")
+}
+
+dependencies {
+    implementation("chat.giga:spring-ai-starter-model-gigachat:2.0.0")
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.cloud:spring-cloud-function-context'
+    implementation 'org.springframework.ai:spring-ai-starter-vector-store-qdrant'
+    implementation 'org.springframework.ai:spring-ai-tika-document-reader'
+    implementation 'org.springframework.cloud:spring-cloud-function-web'
+    implementation 'org.springframework.cloud.fn:spring-file-supplier'
+    implementation 'org.springframework.ai:spring-ai-vector-store-advisor'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+        mavenBom "org.springframework.cloud.fn:spring-functions-catalog-bom:${springFunctionsCatalogVersion}"
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

@@ -1,0 +1,18 @@
+server.port: 0
+file:
+  supplier:
+    directory: ${FILE_SUPPLIER_DIR}
+    filename-regex: .*\.(java|xml|md)
+spring:
+  application.name: spring-ai-doc-loader
+  ai.vectorstore.qdrant.initialize-schema: true
+  cloud.function.definition: fileSupplier|documentReader|splitter|scopeDeterminer|vectorStoreConsumer
+
+  ai:
+    gigachat:
+      auth:
+        bearer:
+          api-key: ${GIGACHAT_API_KEY}
+        scope: gigachat_api_pers
+        certs:
+          ca-certs: ${GIGACHAT_CA_CERT}

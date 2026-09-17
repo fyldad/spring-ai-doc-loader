@@ -21,6 +21,8 @@ import java.util.function.Function;
 @SpringBootApplication
 public class SpringAiDocLoaderApplication {
 
+    private static final Logger log = LoggerFactory.getLogger(SpringAiDocLoaderApplication.class);
+
     static void main(String[] args) {
         SpringApplication.run(SpringAiDocLoaderApplication.class, args);
     }
@@ -34,7 +36,10 @@ public class SpringAiDocLoaderApplication {
     @Bean
     Function<Flux<byte[]>, Flux<Document>> documentReader() {
         return resource -> resource
-                .map(bytes -> new Document(new String(bytes)))
+                .map(bytes -> {
+                    log.info("found new file for load");
+                    return new Document(new String(bytes));
+                })
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -59,7 +64,9 @@ public class SpringAiDocLoaderApplication {
     @Bean
     Consumer<Flux<List<Document>>> vectorStoreConsumer(VectorStore vectorStore) {
         return flux -> flux
+                .publishOn(Schedulers.boundedElastic())
                 .doOnNext(vectorStore)
+                .doOnError(e -> log.error("Error saving to vector store", e))
                 .subscribe();
     }
 

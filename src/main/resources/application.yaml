@@ -9,10 +9,7 @@ spring:
   cloud.function.definition: fileSupplier|documentReader|splitter|scopeDeterminer|vectorStoreConsumer
 
   ai:
-    gigachat:
-      auth:
-        bearer:
-          api-key: ${GIGACHAT_API_KEY}
-        scope: gigachat_api_pers
-        certs:
-          ca-certs: ${GIGACHAT_CA_CERT}
+    ollama:
+#      base-url: http://localhost:11434
+      embedding:
+        model: nomic-embed-text

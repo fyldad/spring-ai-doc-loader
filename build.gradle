@@ -26,11 +26,10 @@ ext {
 }
 
 dependencies {
-    implementation("chat.giga:spring-ai-starter-model-gigachat:2.0.0")
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation "org.springframework.ai:spring-ai-starter-model-ollama"
     implementation 'org.springframework.cloud:spring-cloud-function-context'
     implementation 'org.springframework.ai:spring-ai-starter-vector-store-qdrant'
-    implementation 'org.springframework.ai:spring-ai-tika-document-reader'
     implementation 'org.springframework.cloud:spring-cloud-function-web'
     implementation 'org.springframework.cloud.fn:spring-file-supplier'
     implementation 'org.springframework.ai:spring-ai-vector-store-advisor'

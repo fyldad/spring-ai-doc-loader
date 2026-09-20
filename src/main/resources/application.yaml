@@ -1,8 +1,11 @@
 server.port: 0
 file:
+  consumer:
+    mode: ref
   supplier:
     directory: ${FILE_SUPPLIER_DIR}
     filename-regex: .*\.(java|xml|md)
+    prevent-duplicates: true
 spring:
   application.name: spring-ai-doc-loader
   ai.vectorstore.qdrant.initialize-schema: true

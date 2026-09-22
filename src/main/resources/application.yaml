@@ -1,18 +1,32 @@
 server.port: 0
 file:
-  consumer:
-    mode: ref
   supplier:
     directory: ${FILE_SUPPLIER_DIR}
     filename-regex: .*\.(java|xml|md)
-    prevent-duplicates: true
+    excluded-directories: .git,.gradle,.idea,build,target,node_modules
+document-loader:
+  vector-store:
+    batch-size: 32
+    max-retries: 8
+    initial-backoff: 2s
+    max-backoff: 30s
 spring:
   application.name: spring-ai-doc-loader
   ai.vectorstore.qdrant.initialize-schema: true
-  cloud.function.definition: fileSupplier|documentReader|splitter|scopeDeterminer|vectorStoreConsumer
+  cloud.function.definition: fileTreeSupplier|documentReader|splitter|vectorStoreWriter
+#  cloud.function.definition: fileTreeSupplier|documentReader|splitter|scopeDeterminer|vectorStoreWriter
 
   ai:
     ollama:
 #      base-url: http://localhost:11434
       embedding:
         model: nomic-embed-text
+
+logging:
+  level:
+    root: info
+    org:
+      springframework:
+        ai:
+          transformer:
+            splitter: warn

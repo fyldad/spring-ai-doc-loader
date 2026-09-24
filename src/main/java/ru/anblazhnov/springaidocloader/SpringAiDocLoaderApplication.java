@@ -84,7 +84,7 @@ public class SpringAiDocLoaderApplication {
             List<Document> batch) {
 
         return Mono.fromRunnable(() -> {
-            if (batch == null || batch.isEmpty()) {
+            if (batch != null && !batch.isEmpty()) {
                 vectorStore.accept(batch);
                 log.info("Stored {} document chunks", batch.size());
             }

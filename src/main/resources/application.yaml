@@ -1,15 +1,9 @@
 server.port: 0
 file:
   supplier:
-    directory: ${FILE_SUPPLIER_DIR}
+    directory: C:\Users\WebUser\IdeaProjects
     filename-regex: .*\.(java|xml|md)
     excluded-directories: .git,.gradle,.idea,build,target,node_modules
-document-loader:
-  vector-store:
-    batch-size: 32
-    max-retries: 8
-    initial-backoff: 2s
-    max-backoff: 30s
 spring:
   application.name: spring-ai-doc-loader
   ai.vectorstore.qdrant.initialize-schema: true
@@ -20,7 +14,7 @@ spring:
     ollama:
 #      base-url: http://localhost:11434
       embedding:
-        model: nomic-embed-text
+        model: bge-m3
 
 logging:
   level:

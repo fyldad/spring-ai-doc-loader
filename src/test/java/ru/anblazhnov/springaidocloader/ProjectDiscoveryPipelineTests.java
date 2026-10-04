@@ -33,12 +33,12 @@ class ProjectDiscoveryPipelineTests {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void composesDiscoveryReadersSplitterAndWriterWithoutEmbeddingServices(@TempDir Path root) throws Exception {
+    void composesDiscoverySourceUnitsDocumentsAndWriterWithoutEmbeddingServices(@TempDir Path root) throws Exception {
         Files.writeString(root.resolve("service.wsdl"), "<definitions xmlns='http://schemas.xmlsoap.org/wsdl/' name='CustomerService'/>");
         Files.writeString(root.resolve("application.yaml"), "password: never-embed-this\nservice: customer\n");
         properties.setRepositories(List.of(new DiscoveryProperties.Repository("customer", root)));
         properties.setReport(root.resolve("discovery.csv"));
-        Function<Object, Object> pipeline = catalog.lookup("fileTreeSupplier|documentReader|splitter|vectorStoreWriter");
+        Function<Object, Object> pipeline = catalog.lookup("fileTreeSupplier|documentReader|createDocuments|vectorStoreWriter");
 
         Flux.from((Publisher<?>) pipeline.apply(null)).blockLast(Duration.ofSeconds(10));
 
@@ -47,6 +47,13 @@ class ProjectDiscoveryPipelineTests {
         List<Document> documents = batches.getAllValues().stream().flatMap(List::stream).toList();
         assertThat(documents).isNotEmpty();
         assertThat(documents).allSatisfy(document -> assertThat(document.getMetadata()).containsEntry("repository_id", "customer"));
+        SourceSnapshotStore snapshots = new SourceSnapshotStore(Path.of("build/test-source-snapshots"));
+        assertThat(documents).allSatisfy(document -> {
+            assertThat(document.getId()).isEqualTo(document.getMetadata().get("chunk_id"));
+            assertThat(document.getMetadata()).containsKeys("parent_id", "start_line", "end_line", "file_hash", "chunk_hash");
+            assertThat(document.getText()).startsWith("Repository: customer\n").endsWith(snapshots.excerpt(document.getMetadata()));
+            assertThat(snapshots.read((String) document.getMetadata().get("parent_snapshot"))).isNotEmpty();
+        });
         assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("file_kind", "wsdl"));
         assertThat(documents).anySatisfy(document -> {
             assertThat(document.getMetadata()).containsEntry("reader", "yaml");

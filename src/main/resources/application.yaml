@@ -15,11 +15,16 @@ file:
     max-file-size: 2097152 # bytes; bounds both discovery and the actual read
     encoding: UTF-8 # fallback; BOMs and XML encoding declarations take precedence
     report: build/reports/discovery.csv
+ingestion:
+  chunks:
+    max-characters: 1200 # includes context header; preserves exact source slices
+    snapshot-directory: .ingestion/source-snapshots # retain alongside the vector collection
+  qdrant:
+    payload-indexes: true
 spring:
   application.name: spring-ai-doc-loader
   ai.vectorstore.qdrant.initialize-schema: true
-  cloud.function.definition: fileTreeSupplier|documentReader|splitter|vectorStoreWriter
-#  cloud.function.definition: fileTreeSupplier|documentReader|splitter|scopeDeterminer|vectorStoreWriter
+  cloud.function.definition: fileTreeSupplier|documentReader|createDocuments|vectorStoreWriter
 
   ai:
     ollama:
@@ -30,8 +35,3 @@ spring:
 logging:
   level:
     root: info
-    org:
-      springframework:
-        ai:
-          transformer:
-            splitter: warn

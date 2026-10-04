@@ -1,6 +1,6 @@
 # Project discovery configuration
 
-Section 2 of `ROADMAP.md` is implemented by the discovery supplier and reader routes. Files are classified and safely decoded before becoming Spring AI documents; the existing token splitter then processes them.
+Section 2 of `ROADMAP.md` is implemented by the discovery supplier and reader routes. Files are classified and safely decoded before becoming structured source units; the shared factory then creates documents using the [source contract](SOURCE_CONTRACT.md).
 
 Prefer explicit repository IDs and roots in `application.yaml`:
 
@@ -34,7 +34,7 @@ Repository `.gitignore` files, nested overrides/negations, and local `.git/info/
 
 File-size limits apply to the actual read as well as discovery attributes. Decoding is strict: UTF BOMs and XML encoding declarations override the configured fallback charset. Java/properties/prose without a BOM use the fallback charset. Invalid encoding, malformed XML/YAML, unsafe XML declarations, and binary/NUL content are recorded as failures while scanning continues.
 
-YAML, properties, POM, and other configuration XML are redacted before document creation. Sensitive keys, named XML properties/entries, URL credentials/query tokens, and PEM private keys are masked. YAML is safely parsed, with bounded aliases/nesting/expansion, and recursive values are rejected. Configuration serialization may change formatting and removes configuration comments; source-line mapping is a later roadmap concern. WSDL/XSD and Java source remain verbatim. This is key/value redaction, not general secret detection in arbitrary source or prose; exclude sensitive files and extend `sensitive-key-pattern` for application-specific key names.
+YAML, properties, POM, and other configuration XML are redacted before document creation. Sensitive keys, named XML properties/entries, URL credentials/query tokens, and PEM private keys are masked. YAML is safely parsed, with bounded aliases/nesting/expansion, and recursive values are rejected. Configuration serialization may change formatting and removes configuration comments; transformed files have `location_basis=sanitized_snapshot`, with ranges into the retained sanitized text. Those ranges must not be presented as original-file line numbers. WSDL/XSD and Java source remain verbatim. This is key/value redaction, not general secret detection in arbitrary source or prose; exclude sensitive files and extend `sensitive-key-pattern` for application-specific key names.
 
 The UTF-8 CSV report contains repository, module, relative path, source set, file kind, generated status, and inclusion/exclusion/failure reason. A pruned directory has one row representing its entire subtree, since excluded contents are not opened. Excluded/unreadable files use the filename kind as a hint; successfully read XML uses namespace classification. Failure reasons contain exception types, never parser messages or file contents. `included` means accepted by discovery/readers, not confirmation that embedding or storage succeeded. Each subscription replaces the report; use separate report paths for concurrent ingestion processes. Cancellation closes directory and report handles.
 

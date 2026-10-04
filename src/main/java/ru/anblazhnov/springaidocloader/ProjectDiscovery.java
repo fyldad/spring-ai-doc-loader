@@ -29,14 +29,21 @@ final class ProjectDiscovery implements AutoCloseable {
     private final Set<String> excludedDirectories;
     private final ProjectDocumentReaders readers;
     private final DiscoveryReport report;
+    private final Path snapshotDirectory;
     private int repositoryIndex;
     private DiscoveryProperties.Repository repository;
     private RepositoryRules rules;
     private MavenInventory inventory;
     private FileTreeWalker walker;
+    private Map<String, Object> revision = Map.of();
 
     ProjectDiscovery(DiscoveryProperties properties) throws IOException {
+        this(properties, new ChunkingProperties().getSnapshotDirectory());
+    }
+
+    ProjectDiscovery(DiscoveryProperties properties, Path snapshotDirectory) throws IOException {
         properties.validate();
+        this.snapshotDirectory = snapshotDirectory.toAbsolutePath().normalize();
         this.properties = properties;
         repositories = repositories(properties);
         filenames = Pattern.compile(properties.getFilenameRegex());
@@ -56,6 +63,7 @@ final class ProjectDiscovery implements AutoCloseable {
                 continue;
             }
             Map<String, Object> metadata = new LinkedHashMap<>(inventory.metadata(path));
+            metadata.putAll(revision);
             DiscoveredFile.FileKind kind = DiscoveredFile.FileKind.fromFilename(path);
             try {
                 SourceText.Decoded decoded = SourceText.read(path, properties);
@@ -70,6 +78,7 @@ final class ProjectDiscovery implements AutoCloseable {
                 metadata.put("file_kind", kind.name().toLowerCase(java.util.Locale.ROOT));
                 metadata.put("language", kind.language);
                 metadata.put("encoding", decoded.encoding());
+                metadata.put("file_hash", decoded.fileHash());
                 if (generated && properties.isExcludeGenerated()) {
                     report.record(metadata, kind.name(), "excluded", "generated_source");
                     continue;
@@ -96,6 +105,7 @@ final class ProjectDiscovery implements AutoCloseable {
         try {
             rules = new RepositoryRules(repository.root(), properties);
             inventory = new MavenInventory(repository, properties, rules);
+            revision = RepositoryRevision.read(repository.root());
             walker = new FileTreeWalker(repository.root(), this::include,
                     (path, error) -> failure(path, inventory.metadata(path), "unknown", "inaccessible:" + error.getClass().getSimpleName()));
             log.info("Discovering repository {} at {}", repository.id(), repository.root());
@@ -110,6 +120,7 @@ final class ProjectDiscovery implements AutoCloseable {
             if (attributes.isSymbolicLink()) reason = "symbolic_link";
             else if (attributes.isDirectory() && excludedDirectories.contains(path.getFileName().toString())) reason = "configured_directory";
             else if (path.toAbsolutePath().normalize().equals(properties.getReport().toAbsolutePath().normalize())) reason = "discovery_report";
+            else if (path.toAbsolutePath().normalize().startsWith(snapshotDirectory)) reason = "source_snapshots";
         else reason = rules.exclusion(path, attributes.isDirectory());
             if (reason == null && !attributes.isDirectory()) {
                 if (!attributes.isRegularFile()) reason = "not_regular_file";

@@ -48,6 +48,8 @@ The following phases are proposed work; they are not implemented by this documen
 
 ## 3. Introduce a source and metadata contract
 
+**Status: implemented.** See [SOURCE_CONTRACT.md](SOURCE_CONTRACT.md) for structured units, stable identities, source snapshots, location semantics, document text, and payload indexes. Current readers still extract full files; AST and semantic XML fields remain phases 4 and 5. Configuration locations explicitly refer to sanitized snapshots when redaction changes formatting. Stale-part reconciliation remains phase 8.
+
 **Priority: before AST readers.** Separate an extracted source unit from the final Spring AI `Document`. Readers should return structured units; a shared document factory should create consistently formatted retrieval chunks.
 
 Recommended fields, populated only where applicable:

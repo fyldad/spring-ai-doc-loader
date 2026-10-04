@@ -14,7 +14,7 @@ final class SourceText {
     private static final Pattern XML_ENCODING = Pattern.compile(
             "^\\s*<\\?xml[^?]*encoding\\s*=\\s*['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE);
 
-    record Decoded(String text, String encoding) { }
+    record Decoded(String text, String encoding, String fileHash) { }
 
     static Decoded read(Path path, DiscoveryProperties properties) throws IOException {
         // Bound the actual read too: the file may grow after its attributes were inspected.
@@ -53,7 +53,7 @@ final class SourceText {
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(bytes, offset, bytes.length - offset)).toString();
         if (text.indexOf('\0') >= 0) throw new IOException("Binary/NUL content is not indexable text");
-        return new Decoded(text, charset.name());
+        return new Decoded(text, charset.name(), SourceIdentity.hash(bytes));
     }
 
     static boolean isXml(DiscoveredFile.FileKind kind) {

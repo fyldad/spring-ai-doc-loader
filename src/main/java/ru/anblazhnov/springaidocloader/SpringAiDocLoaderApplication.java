@@ -7,7 +7,6 @@ import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
@@ -40,18 +39,16 @@ public class SpringAiDocLoaderApplication {
     }
 
     @Bean
-    Function<Flux<DiscoveredFile>, Flux<Document>> documentReader(DiscoveryProperties properties) {
+    Function<Flux<DiscoveredFile>, Flux<SourceUnit>> documentReader(DiscoveryProperties properties) {
         ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
         return files -> files.map(readers::read);
     }
 
     @Bean
-    Function<Flux<Document>, Flux<List<Document>>> splitter() {
-        TokenTextSplitter splitter = TokenTextSplitter.builder()
-                .withChunkSize(300)
-                .build();
-        return resource -> resource
-                .map(splitter::split)
+    Function<Flux<SourceUnit>, Flux<List<Document>>> createDocuments(ChunkingProperties properties) {
+        SourceDocumentFactory factory = new SourceDocumentFactory(properties);
+        return units -> units
+                .map(factory::create)
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

@@ -9,13 +9,13 @@ import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(DiscoveryProperties.class)
+@EnableConfigurationProperties({DiscoveryProperties.class, ChunkingProperties.class})
 public class FileSourceConfiguration {
 
     @Bean
-    Supplier<Flux<DiscoveredFile>> fileTreeSupplier(DiscoveryProperties properties) {
+    Supplier<Flux<DiscoveredFile>> fileTreeSupplier(DiscoveryProperties properties, ChunkingProperties chunks) {
         return () -> Flux.generate(
-                        () -> new ProjectDiscovery(properties),
+                        () -> new ProjectDiscovery(properties, chunks.getSnapshotDirectory()),
                         (discovery, sink) -> {
                             DiscoveredFile file = discovery.next();
                             if (file == null) {

@@ -4,8 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.springframework.ai.document.Document;
-
 final class ProjectDocumentReaders {
     private static final Pattern PACKAGE = Pattern.compile("(?m)^\\s*package\\s+([\\p{javaJavaIdentifierPart}.]+)\\s*;");
     private final ConfigurationRedactor redactor;
@@ -28,11 +26,18 @@ final class ProjectDocumentReaders {
             case PROSE -> prose(file, metadata);
             case OTHER -> throw new IllegalArgumentException("Unsupported file kind");
         };
+        metadata.put("parser_version", "full-file-reader-v1");
+        metadata.put("parse_status", SourceText.isXml(file.kind()) || file.kind() == DiscoveredFile.FileKind.YAML
+                ? "validated" : "text_only");
+        metadata.put("resolution_status", "not_attempted");
+        boolean transformed = !text.equals(file.text());
+        metadata.put("content_origin", transformed ? "sanitized_source" : "source");
+        metadata.put("location_basis", transformed ? "sanitized_snapshot" : "original_source");
         return new DiscoveredFile(file.path(), file.kind(), text, Map.copyOf(metadata));
     }
 
-    Document read(DiscoveredFile file) {
-        return new Document(file.text(), file.metadata());
+    SourceUnit read(DiscoveredFile file) {
+        return new SourceUnit(file.text(), 0, file.text().length(), "file_excerpt", file.metadata());
     }
 
     private String javaSource(DiscoveredFile file, Map<String, Object> metadata) {

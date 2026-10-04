@@ -32,6 +32,8 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-vector-store-qdrant'
     implementation 'org.springframework.cloud:spring-cloud-function-web'
     implementation 'org.springframework.ai:spring-ai-vector-store-advisor'
+    implementation 'org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r'
+    implementation 'org.yaml:snakeyaml'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

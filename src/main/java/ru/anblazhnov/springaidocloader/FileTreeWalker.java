@@ -11,6 +11,8 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -20,16 +22,24 @@ final class FileTreeWalker implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(FileTreeWalker.class);
 
-    private final Pattern filenamePattern;
-    private final Set<String> excludedDirectoryNames;
+    private final BiPredicate<Path, BasicFileAttributes> selector;
+    private final BiConsumer<Path, IOException> failureHandler;
     private final Deque<DirectoryCursor> directories = new ArrayDeque<>();
 
     FileTreeWalker(Path root, Pattern filenamePattern, Set<String> excludedDirectoryNames) throws IOException {
-        if (!Files.isDirectory(root)) {
+        this(root, (path, attributes) -> attributes.isDirectory()
+                ? !excludedDirectoryNames.contains(path.getFileName().toString())
+                : attributes.isRegularFile() && filenamePattern.matcher(path.getFileName().toString()).matches(),
+                (path, error) -> log.warn("Skipping inaccessible path: {}", path, error));
+    }
+
+    FileTreeWalker(Path root, BiPredicate<Path, BasicFileAttributes> selector,
+            BiConsumer<Path, IOException> failureHandler) throws IOException {
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalArgumentException("File supplier directory does not exist or is not a directory: " + root);
         }
-        this.filenamePattern = filenamePattern;
-        this.excludedDirectoryNames = excludedDirectoryNames;
+        this.selector = selector;
+        this.failureHandler = failureHandler;
         openDirectory(root);
     }
 
@@ -46,7 +56,7 @@ final class FileTreeWalker implements AutoCloseable {
             }
             catch (DirectoryIteratorException error) {
                 closeCurrentDirectory();
-                log.warn("Cannot finish scanning directory: {}", cursor.path(), error.getCause());
+                failureHandler.accept(cursor.path(), error.getCause());
                 continue;
             }
 
@@ -55,22 +65,20 @@ final class FileTreeWalker implements AutoCloseable {
                 attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             }
             catch (IOException error) {
-                log.warn("Skipping inaccessible file: {}", path, error);
+                failureHandler.accept(path, error);
                 continue;
             }
 
+            if (!selector.test(path, attributes)) continue;
             if (attributes.isDirectory()) {
-                if (!excludedDirectoryNames.contains(path.getFileName().toString())) {
-                    try {
-                        openDirectory(path);
-                    }
-                    catch (IOException error) {
-                        log.warn("Skipping inaccessible directory: {}", path, error);
-                    }
+                try {
+                    openDirectory(path);
+                }
+                catch (IOException error) {
+                    failureHandler.accept(path, error);
                 }
             }
-            else if (attributes.isRegularFile()
-                    && filenamePattern.matcher(path.getFileName().toString()).matches()) {
+            else if (attributes.isRegularFile()) {
                 return path;
             }
         }

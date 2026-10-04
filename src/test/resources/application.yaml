@@ -1,0 +1,4 @@
+# Context tests must not index developer checkouts or contact a vector database.
+file.supplier.enabled: false
+spring.ai.vectorstore.qdrant.initialize-schema: false
+spring.cloud.function.definition: fileTreeSupplier|documentReader|splitter|vectorStoreWriter

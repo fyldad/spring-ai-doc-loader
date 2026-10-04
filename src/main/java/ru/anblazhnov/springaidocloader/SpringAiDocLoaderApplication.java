@@ -1,12 +1,6 @@
 package ru.anblazhnov.springaidocloader;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Function;
 
 import org.reactivestreams.Publisher;
@@ -18,7 +12,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.function.context.FunctionCatalog;
 import org.springframework.context.annotation.Bean;
 import reactor.core.publisher.Flux;
@@ -30,14 +24,12 @@ public class SpringAiDocLoaderApplication {
 
     private static final Logger log = LoggerFactory.getLogger(SpringAiDocLoaderApplication.class);
 
-    @Value("${file.supplier.directory}")
-    private String directory;
-
     static void main(String[] args) {
         SpringApplication.run(SpringAiDocLoaderApplication.class, args);
     }
 
     @Bean
+    @ConditionalOnProperty(name = "file.supplier.enabled", havingValue = "true", matchIfMissing = true)
     ApplicationRunner go(FunctionCatalog catalog) {
         Function<Object, Object> function = catalog.lookup(null);
         return _ -> Flux.from((Publisher<?>) function.apply(null))
@@ -48,13 +40,9 @@ public class SpringAiDocLoaderApplication {
     }
 
     @Bean
-    Function<Flux<File>, Flux<Document>> documentReader() {
-        return files -> files.concatMap(file -> Mono.fromCallable(() -> readDocument(file))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(error -> {
-                    log.warn("Skipping unreadable file: {}", file, error);
-                    return Mono.empty();
-                }), 1);
+    Function<Flux<DiscoveredFile>, Flux<Document>> documentReader(DiscoveryProperties properties) {
+        ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
+        return files -> files.map(readers::read);
     }
 
     @Bean
@@ -91,24 +79,6 @@ public class SpringAiDocLoaderApplication {
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .then();
-    }
-
-    private Document readDocument(File file) {
-        try {
-            Path path = file.toPath();
-            log.info("Loading file: {}", path);
-            return new Document(Files.readString(path), getMetaData(path.toString()));
-        }
-        catch (IOException error) {
-            throw new UncheckedIOException("Cannot read file " + file, error);
-        }
-    }
-
-    private Map<String, Object> getMetaData(String path) {
-        return Map.of(
-                "scope", "iflex",
-                "module", path.replace(directory, "").split("\\\\")[1]
-        );
     }
 
 }

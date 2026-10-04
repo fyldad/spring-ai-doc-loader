@@ -1,9 +1,20 @@
 server.port: 0
 file:
   supplier:
-    directory: C:\Users\WebUser\IdeaProjects
-    filename-regex: .*\.(java|xml|md)
+    directory: C:\Users\WebUser\IdeaProjects\Orch
+    # Prefer explicit IDs/roots when indexing named repositories. When this list is
+    # absent, directory accepts a project root or a folder of project directories.
+    # repositories:
+    #   - id: customer-services
+    #     root: C:\projects\customer-services
+    filename-regex: (?i).*\.(java|xml|wsdl|xsd|md|txt|yaml|yml|properties)
     excluded-directories: .git,.gradle,.idea,build,target,node_modules
+    excluded-paths: [] # Git-style patterns, relative to each repository root
+    respect-gitignore: true
+    exclude-generated: false
+    max-file-size: 2097152 # bytes; bounds both discovery and the actual read
+    encoding: UTF-8 # fallback; BOMs and XML encoding declarations take precedence
+    report: build/reports/discovery.csv
 spring:
   application.name: spring-ai-doc-loader
   ai.vectorstore.qdrant.initialize-schema: true

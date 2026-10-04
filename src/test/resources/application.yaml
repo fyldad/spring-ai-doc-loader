@@ -3,3 +3,4 @@ file.supplier.enabled: false
 spring.ai.vectorstore.qdrant.initialize-schema: false
 spring.cloud.function.definition: fileTreeSupplier|documentReader|createDocuments|vectorStoreWriter
 ingestion.chunks.snapshot-directory: build/test-source-snapshots
+spring.ai.ollama.embedding.truncate: false

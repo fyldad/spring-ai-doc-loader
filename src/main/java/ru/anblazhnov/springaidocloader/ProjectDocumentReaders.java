@@ -12,7 +12,8 @@ final class ProjectDocumentReaders {
         redactor = new ConfigurationRedactor(properties.getSensitiveKeyPattern());
     }
 
-    // Each route currently retains full-file text. AST/semantic extraction belongs to phases 4/5.
+    // Discovery validates/redacts snapshots. Java AST extraction runs in documentReader;
+    // semantic XML extraction remains phase 5.
     DiscoveredFile prepare(DiscoveredFile file) throws Exception {
         Map<String, Object> metadata = new LinkedHashMap<>(file.metadata());
         String text = switch (file.kind()) {

@@ -9,7 +9,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({DiscoveryProperties.class, ChunkingProperties.class})
+@EnableConfigurationProperties({DiscoveryProperties.class, ChunkingProperties.class, JavaParsingProperties.class})
 public class FileSourceConfiguration {
 
     @Bean

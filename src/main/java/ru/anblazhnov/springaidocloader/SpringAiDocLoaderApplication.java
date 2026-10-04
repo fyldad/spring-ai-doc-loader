@@ -39,9 +39,12 @@ public class SpringAiDocLoaderApplication {
     }
 
     @Bean
-    Function<Flux<DiscoveredFile>, Flux<SourceUnit>> documentReader(DiscoveryProperties properties) {
+    Function<Flux<DiscoveredFile>, Flux<SourceUnit>> documentReader(DiscoveryProperties properties,
+            JavaParsingProperties javaProperties, ChunkingProperties chunks) {
         ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
-        return files -> files.map(readers::read);
+        JavaSourceReader javaReader = new JavaSourceReader(javaProperties, chunks);
+        return files -> files.concatMapIterable(file -> file.kind() == DiscoveredFile.FileKind.JAVA
+                ? javaReader.read(file) : List.of(readers.read(file)));
     }
 
     @Bean

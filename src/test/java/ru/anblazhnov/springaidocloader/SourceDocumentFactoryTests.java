@@ -12,8 +12,11 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.document.MetadataMode;
 import org.springframework.ai.embedding.EmbeddingOptions;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingProperties;
 import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.ollama.api.OllamaApi.EmbeddingsRequest;
 import org.springframework.ai.ollama.api.OllamaApi.EmbeddingsResponse;
 
@@ -141,11 +144,19 @@ class SourceDocumentFactoryTests {
         }
         OllamaApi api = mock(OllamaApi.class);
         when(api.embed(any(EmbeddingsRequest.class))).thenReturn(new EmbeddingsResponse("bge-m3", List.of(new float[] {1, 2}), 0L, 0L, 1));
-        OllamaEmbeddingModel model = OllamaEmbeddingModel.builder().ollamaApi(api).build();
+        OllamaEmbeddingProperties properties = new OllamaEmbeddingProperties();
+        properties.setModel("bge-m3");
+        properties.setTruncate(false);
+        OllamaEmbeddingModel delegate = OllamaEmbeddingModel.builder().ollamaApi(api)
+                .options(OllamaEmbeddingOptions.builder().model("bge-m3").truncate(false).numCtx(2048).build()).build();
+        EmbeddingModel model = (EmbeddingModel) OllamaEmbeddingCompatibility.adapt(delegate, properties);
         model.embed(List.of(document), EmbeddingOptions.builder().build(), documents -> List.of(documents));
         var request = org.mockito.ArgumentCaptor.forClass(EmbeddingsRequest.class);
         verify(api).embed(request.capture());
         assertThat(request.getValue().input()).containsExactly(document.getText());
+        assertThat(request.getValue().truncate()).isFalse();
+        assertThat(request.getValue().model()).isEqualTo("bge-m3");
+        assertThat(request.getValue().options()).containsEntry("num_ctx", 2048);
         assertThat(document.getText()).startsWith("Repository: repo\nModule: repo:.\nFile: Endpoint.java\n")
                 .doesNotContain("file_hash", "chunk_hash", "parser_version", document.getId());
     }

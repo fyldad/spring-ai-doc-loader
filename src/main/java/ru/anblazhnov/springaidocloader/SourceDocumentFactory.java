@@ -12,33 +12,56 @@ final class SourceDocumentFactory {
     static final String VERSION = "source-document-v1";
     static final String CHUNKER_VERSION = "line-character-v1";
     private final int maxCharacters;
+    private final int javaMaxTokens;
     private final SourceSnapshotStore snapshots;
 
     SourceDocumentFactory(ChunkingProperties properties) {
         properties.validate();
         maxCharacters = properties.getMaxCharacters();
+        javaMaxTokens = properties.getJavaMaxTokens();
         snapshots = new SourceSnapshotStore(properties.getSnapshotDirectory());
     }
 
     List<Document> create(SourceUnit unit) {
         if (unit.text().isBlank()) return List.of();
-        String header = header(unit.metadata());
-        int budget = maxCharacters - header.length();
-        if (budget < 2) throw new IllegalArgumentException("Source context header exceeds chunk character budget");
+        boolean semanticJava = Boolean.TRUE.equals(unit.metadata().get("semantic_java"));
+        String header = semanticJava ? javaHeader(unit.metadata()) : header(unit.metadata());
+        int budget = semanticJava ? javaMaxTokens - ConservativeTokenBudget.count(header) : maxCharacters - header.length();
+        if (budget < (semanticJava ? 6 : 2)) throw new IllegalArgumentException("Source context header exceeds chunk budget");
         String sourceReference = snapshots.save(unit.fileId(), unit.source());
         String parentReference = snapshots.save(unit.parentId(), unit.text());
         String snapshotHash = SourceIdentity.hash(unit.source());
+        String javaContext = javaContext(unit.metadata());
+        String javaContextReference = javaContext.isBlank() ? null : snapshots.save(
+                SourceIdentity.uuid("java-context", unit.parentId()), javaContext);
         int[] lineStarts = lineStarts(unit.source());
         List<Document> documents = new ArrayList<>();
         int start = unit.startOffset();
         while (start < unit.endOffset()) {
-            int end = boundary(unit.source(), start, unit.endOffset(), budget);
+            int end;
+            if (semanticJava) {
+                int hardEnd = ConservativeTokenBudget.end(unit.source(), start, unit.endOffset(), budget);
+                end = hardEnd;
+                if (hardEnd < unit.endOffset()) {
+                    int semanticEnd = start;
+                    for (int candidate : unit.boundaries()) {
+                        if (candidate > hardEnd) break;
+                        if (candidate > start) semanticEnd = candidate;
+                    }
+                    end = semanticEnd > start ? semanticEnd : boundary(unit.source(), start, unit.endOffset(), hardEnd - start);
+                }
+            }
+            else end = boundary(unit.source(), start, unit.endOffset(), budget);
             String excerpt = unit.source().substring(start, end);
             int part = documents.size();
             String id = SourceIdentity.uuid("chunk", unit.parentId(), unit.chunkKind(), Integer.toString(part));
             Map<String, Object> metadata = new LinkedHashMap<>(unit.metadata());
             // Module relationships belong in the inventory, not in every retrieval payload.
             metadata.remove("declared_modules");
+            metadata.remove("semantic_java");
+            metadata.remove("imports");
+            metadata.remove("member_signatures");
+            if (javaContextReference != null) metadata.put("java_context_snapshot", javaContextReference);
             metadata.put("chunk_id", id);
             metadata.put("parent_id", unit.parentId());
             metadata.put("chunk_kind", unit.chunkKind());
@@ -51,7 +74,15 @@ final class SourceDocumentFactory {
             metadata.put("end_line", lineAt(lineStarts, end - 1));
             metadata.put("start_offset", start);
             metadata.put("end_offset", end);
-            metadata.put("chunker_version", CHUNKER_VERSION);
+            metadata.put("chunker_version", semanticJava ? "java-statement-token-v1" : CHUNKER_VERSION);
+            if (semanticJava) {
+                int estimate = ConservativeTokenBudget.count(header + excerpt);
+                if (estimate > javaMaxTokens) throw new IllegalStateException("Java chunk exceeds configured token bound");
+                metadata.put("token_estimate", estimate);
+                metadata.put("token_budget", javaMaxTokens);
+                metadata.put("token_counter", ConservativeTokenBudget.VERSION);
+                metadata.put("split_basis", unit.boundaries().contains(end) || end == unit.endOffset() ? "semantic" : "line_or_character");
+            }
             metadata.put("document_format_version", VERSION);
             Document document = new Document(id, header + excerpt, metadata);
             // Do not reintroduce bookkeeping when a caller asks for formatted embedding/LLM content.
@@ -72,6 +103,7 @@ final class SourceDocumentFactory {
         labels.put("type_fqn", "Type");
         labels.put("signature", "Signature");
         labels.put("annotations", "Annotations");
+        labels.put("overview", "Members");
         labels.put("namespace_uri", "Namespace");
         labels.put("element_qname", "Element");
         labels.put("service", "Service");
@@ -89,6 +121,26 @@ final class SourceDocumentFactory {
             }
         });
         return header.append('\n').toString();
+    }
+
+    private String javaHeader(Map<String, Object> metadata) {
+        Map<String, Object> compact = new LinkedHashMap<>(metadata);
+        for (String field : List.of("signature", "annotations", "overview")) {
+            Object value = compact.get(field);
+            if (value != null) compact.put(field, ConservativeTokenBudget.abbreviate(value.toString(), Math.max(32, javaMaxTokens / 5)));
+        }
+        return header(compact);
+    }
+
+    private static String javaContext(Map<String, Object> metadata) {
+        StringBuilder context = new StringBuilder();
+        for (String field : List.of("imports", "inheritance", "member_signatures")) {
+            if (metadata.get(field) instanceof List<?> values && !values.isEmpty()) {
+                context.append(field).append(":\n");
+                values.forEach(value -> context.append(value).append('\n'));
+            }
+        }
+        return context.toString();
     }
 
     private static int boundary(String source, int start, int limit, int budget) {

@@ -18,7 +18,13 @@ file:
 ingestion:
   chunks:
     max-characters: 1200 # includes context header; preserves exact source slices
+    java-max-tokens: 800 # conservative UTF-8/NFKC bound, including the repeated header
     snapshot-directory: .ingestion/source-snapshots # retain alongside the vector collection
+  java:
+    language-level: JAVA_25
+    resolve-symbols: false # enable with local source roots/JARs; never builds repositories
+    source-roots: []
+    dependency-jars: []
   qdrant:
     payload-indexes: true
 spring:
@@ -31,6 +37,7 @@ spring:
 #      base-url: http://localhost:11434
       embedding:
         model: bge-m3
+        truncate: false # surface an input-limit mismatch instead of losing source silently
 
 logging:
   level:

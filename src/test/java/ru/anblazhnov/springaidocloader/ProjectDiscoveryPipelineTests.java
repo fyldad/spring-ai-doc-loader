@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.reactivestreams.Publisher;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingProperties;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,13 +30,22 @@ import static org.mockito.Mockito.verify;
 class ProjectDiscoveryPipelineTests {
     @Autowired FunctionCatalog catalog;
     @Autowired DiscoveryProperties properties;
+    @Autowired OllamaEmbeddingProperties embeddingProperties;
     @MockitoBean VectorStore vectorStore;
+
+    @Test
+    void disablesSilentEmbeddingTruncation() {
+        assertThat(embeddingProperties.getTruncate()).isFalse();
+        assertThat(embeddingProperties.toOptions().getTruncate()).isFalse();
+    }
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     void composesDiscoverySourceUnitsDocumentsAndWriterWithoutEmbeddingServices(@TempDir Path root) throws Exception {
         Files.writeString(root.resolve("service.wsdl"), "<definitions xmlns='http://schemas.xmlsoap.org/wsdl/' name='CustomerService'/>");
         Files.writeString(root.resolve("application.yaml"), "password: never-embed-this\nservice: customer\n");
+        Files.writeString(root.resolve("Endpoint.java"), "package example; class Endpoint { void load(int count) {} void load(String id) {} }");
+        Files.writeString(root.resolve("Broken.java"), "class Broken { void load( { // searchable parse failure");
         properties.setRepositories(List.of(new DiscoveryProperties.Repository("customer", root)));
         properties.setReport(root.resolve("discovery.csv"));
         Function<Object, Object> pipeline = catalog.lookup("fileTreeSupplier|documentReader|createDocuments|vectorStoreWriter");
@@ -55,6 +65,9 @@ class ProjectDiscoveryPipelineTests {
             assertThat(snapshots.read((String) document.getMetadata().get("parent_snapshot"))).isNotEmpty();
         });
         assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("file_kind", "wsdl"));
+        assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("symbol_id", "example.Endpoint#load(int)").containsEntry("chunk_kind", "java_method"));
+        assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("symbol_id", "example.Endpoint#load(java.lang.String)"));
+        assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("parse_status", "fallback").containsEntry("chunk_kind", "java_fallback"));
         assertThat(documents).anySatisfy(document -> {
             assertThat(document.getMetadata()).containsEntry("reader", "yaml");
             assertThat(document.getText()).contains("REDACTED").doesNotContain("never-embed-this");
@@ -67,13 +80,20 @@ class ProjectDiscoveryPipelineTests {
         new ApplicationContextRunner().withUserConfiguration(FileSourceConfiguration.class)
                 .withPropertyValues("file.supplier.repositories[0].id=stable-id",
                         "file.supplier.repositories[0].root=" + root,
-                        "file.supplier.max-file-size=4096", "file.supplier.excluded-paths[0]=private/**")
+                        "file.supplier.max-file-size=4096", "file.supplier.excluded-paths[0]=private/**",
+                        "ingestion.java.language-level=JAVA_21", "ingestion.java.resolve-symbols=true",
+                        "ingestion.java.source-roots[0]=" + root, "ingestion.chunks.java-max-tokens=600")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     DiscoveryProperties bound = context.getBean(DiscoveryProperties.class);
                     assertThat(bound.getRepositories()).containsExactly(new DiscoveryProperties.Repository("stable-id", root));
                     assertThat(bound.getMaxFileSize()).isEqualTo(4096);
                     assertThat(bound.getExcludedPaths()).containsExactly("private/**");
+                    JavaParsingProperties java = context.getBean(JavaParsingProperties.class);
+                    assertThat(java.getLanguageLevel()).isEqualTo("JAVA_21");
+                    assertThat(java.isResolveSymbols()).isTrue();
+                    assertThat(java.getSourceRoots()).containsExactly(root);
+                    assertThat(context.getBean(ChunkingProperties.class).getJavaMaxTokens()).isEqualTo(600);
                 });
     }
 }

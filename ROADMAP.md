@@ -32,7 +32,7 @@ The following phases are proposed work; they are not implemented by this documen
 
 ## 2. Discover projects and classify files correctly
 
-**Status: implemented.** See [DISCOVERY.md](DISCOVERY.md) for configuration, report semantics, and discovery limits. Java AST parsing and semantic XML extraction remain phases 4 and 5.
+**Status: implemented.** See [DISCOVERY.md](DISCOVERY.md) for configuration, report semantics, and discovery limits. Java AST parsing is implemented in phase 4; semantic XML extraction remains phase 5.
 
 **Priority: foundational.** Replace the assumption that the first directory segment is the module with an explicit project inventory.
 
@@ -48,7 +48,7 @@ The following phases are proposed work; they are not implemented by this documen
 
 ## 3. Introduce a source and metadata contract
 
-**Status: implemented.** See [SOURCE_CONTRACT.md](SOURCE_CONTRACT.md) for structured units, stable identities, source snapshots, location semantics, document text, and payload indexes. Current readers still extract full files; AST and semantic XML fields remain phases 4 and 5. Configuration locations explicitly refer to sanitized snapshots when redaction changes formatting. Stale-part reconciliation remains phase 8.
+**Status: implemented.** See [SOURCE_CONTRACT.md](SOURCE_CONTRACT.md) for structured units, stable identities, source snapshots, location semantics, document text, and payload indexes. Java readers now extract AST units; semantic XML fields remain phase 5. Configuration locations explicitly refer to sanitized snapshots when redaction changes formatting. Stale-part reconciliation remains phase 8.
 
 **Priority: before AST readers.** Separate an extracted source unit from the final Spring AI `Document`. Readers should return structured units; a shared document factory should create consistently formatted retrieval chunks.
 
@@ -90,6 +90,8 @@ Keep hashes, ingestion timestamps, and internal bookkeeping out of the embedding
 **Done when:** a retrieved document carries enough information to display its origin, read the exact source, and locate its parent without guessing.
 
 ## 4. Add Java AST parsing and semantic chunking
+
+**Status: implemented.** See [JAVA_CHUNKING.md](JAVA_CHUNKING.md) for the pinned parser, semantic units, token bounds, citation semantics, optional local symbol resolution, fallback diagnostics, and remaining resolution limits. Retrieval-quality tuning and model comparisons still require the benchmark.
 
 **Priority: main improvement for Java.** Start with JavaParser and add JavaSymbolSolver for relationship resolution. The [JavaParser project](https://github.com/javaparser/javaparser) documents AST parsing, symbol resolution, and Java support through Java 25. Pin a release and test the specific syntax used by target repositories, including preview features if needed.
 

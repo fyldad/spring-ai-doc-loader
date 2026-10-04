@@ -1,16 +1,22 @@
 package ru.anblazhnov.springaidocloader;
 
 import java.util.Map;
+import java.util.List;
 
 /** Extracted unit with a verbatim range in a decoded (possibly sanitized) source snapshot. */
 record SourceUnit(String source, int startOffset, int endOffset, String chunkKind,
-        Map<String, Object> metadata) {
+        Map<String, Object> metadata, List<Integer> boundaries) {
+    SourceUnit(String source, int startOffset, int endOffset, String chunkKind, Map<String, Object> metadata) {
+        this(source, startOffset, endOffset, chunkKind, metadata, List.of());
+    }
+
     SourceUnit {
         if (startOffset < 0 || endOffset < startOffset || endOffset > source.length()) {
             throw new IllegalArgumentException("Invalid source range");
         }
         if (chunkKind == null || chunkKind.isBlank()) throw new IllegalArgumentException("Chunk kind is required");
         metadata = Map.copyOf(metadata);
+        boundaries = boundaries.stream().filter(offset -> offset > startOffset && offset <= endOffset).distinct().sorted().toList();
         for (String field : new String[] {"repository_id", "module_id", "relative_path", "language", "file_kind", "source_set", "file_hash"}) {
             if (!(metadata.get(field) instanceof String value) || value.isBlank()) {
                 throw new IllegalArgumentException("Missing source identity: " + field);

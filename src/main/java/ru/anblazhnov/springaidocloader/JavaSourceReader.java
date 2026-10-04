@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 
 /** Parses the indexed snapshot once; AST nodes are used only to select original source ranges. */
 final class JavaSourceReader {
-    static final String VERSION = "javaparser-3.28.0-java-reader-v1";
+    static final String VERSION = "javaparser-3.28.0-java-reader-v2";
     private static final Logger log = LoggerFactory.getLogger(JavaSourceReader.class);
     private final JavaParser parser;
     private final ReflectionTypeSolver jdkTypes = new ReflectionTypeSolver();
@@ -209,6 +209,7 @@ final class JavaSourceReader {
             metadata.put("annotations", annotated.getAnnotations().stream().map(Object::toString).toList());
         }
         metadata.put("visibility", visibility(node));
+        SoapJavaMetadata.apply(node, metadata);
         return metadata;
     }
 

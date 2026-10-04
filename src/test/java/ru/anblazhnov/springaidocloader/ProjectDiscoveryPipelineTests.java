@@ -42,7 +42,15 @@ class ProjectDiscoveryPipelineTests {
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     void composesDiscoverySourceUnitsDocumentsAndWriterWithoutEmbeddingServices(@TempDir Path root) throws Exception {
-        Files.writeString(root.resolve("service.wsdl"), "<definitions xmlns='http://schemas.xmlsoap.org/wsdl/' name='CustomerService'/>");
+        Files.writeString(root.resolve("service.wsdl"), """
+                <definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:t="urn:customer" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:customer" name="CustomerService">
+                  <types><xs:schema targetNamespace="urn:customer"><xs:include schemaLocation="types.xsd"/></xs:schema></types>
+                  <message name="Request"><part name="body" element="t:GetRequest"/></message>
+                  <portType name="Port"><operation name="get"><input message="t:Request"/></operation></portType>
+                </definitions>
+                """);
+        Files.writeString(root.resolve("types.xsd"), "<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema' targetNamespace='urn:customer'><xs:element name='GetRequest' type='xs:string'/></xs:schema>");
+        Files.writeString(root.resolve("pom.xml"), "<project><artifactId>customer</artifactId><properties><password>never-embed-this</password></properties><dependencies><dependency><groupId>org.example</groupId><artifactId>api</artifactId><version>${unknown}</version></dependency></dependencies></project>");
         Files.writeString(root.resolve("application.yaml"), "password: never-embed-this\nservice: customer\n");
         Files.writeString(root.resolve("Endpoint.java"), "package example; class Endpoint { void load(int count) {} void load(String id) {} }");
         Files.writeString(root.resolve("Broken.java"), "class Broken { void load( { // searchable parse failure");
@@ -65,6 +73,9 @@ class ProjectDiscoveryPipelineTests {
             assertThat(snapshots.read((String) document.getMetadata().get("parent_snapshot"))).isNotEmpty();
         });
         assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("file_kind", "wsdl"));
+        assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("chunk_kind", "wsdl_operation").containsKey("relationships_snapshot"));
+        assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("chunk_kind", "maven_dependency").containsEntry("version", "${unknown}").containsEntry("dependency_model", "declared"));
+        assertThat(documents).allSatisfy(document -> assertThat(document.getText()).doesNotContain("never-embed-this"));
         assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("symbol_id", "example.Endpoint#load(int)").containsEntry("chunk_kind", "java_method"));
         assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("symbol_id", "example.Endpoint#load(java.lang.String)"));
         assertThat(documents).anySatisfy(document -> assertThat(document.getMetadata()).containsEntry("parse_status", "fallback").containsEntry("chunk_kind", "java_fallback"));
@@ -82,7 +93,9 @@ class ProjectDiscoveryPipelineTests {
                         "file.supplier.repositories[0].root=" + root,
                         "file.supplier.max-file-size=4096", "file.supplier.excluded-paths[0]=private/**",
                         "ingestion.java.language-level=JAVA_21", "ingestion.java.resolve-symbols=true",
-                        "ingestion.java.source-roots[0]=" + root, "ingestion.chunks.java-max-tokens=600")
+                        "ingestion.java.source-roots[0]=" + root, "ingestion.chunks.java-max-tokens=600",
+                        "ingestion.xml.max-import-depth=3", "ingestion.xml.max-import-files=8",
+                        "ingestion.xml.element-names[0]=component", "ingestion.xml.maven-resolution-policy=local-properties")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     DiscoveryProperties bound = context.getBean(DiscoveryProperties.class);
@@ -94,6 +107,11 @@ class ProjectDiscoveryPipelineTests {
                     assertThat(java.isResolveSymbols()).isTrue();
                     assertThat(java.getSourceRoots()).containsExactly(root);
                     assertThat(context.getBean(ChunkingProperties.class).getJavaMaxTokens()).isEqualTo(600);
+                    XmlParsingProperties xml = context.getBean(XmlParsingProperties.class);
+                    assertThat(xml.getMaxImportDepth()).isEqualTo(3);
+                    assertThat(xml.getMaxImportFiles()).isEqualTo(8);
+                    assertThat(xml.getElementNames()).containsExactly("component");
+                    assertThat(xml.getMavenResolutionPolicy()).isEqualTo("local-properties");
                 });
     }
 }

@@ -9,7 +9,7 @@ import java.util.Map;
 import org.springframework.ai.document.Document;
 
 final class SourceDocumentFactory {
-    static final String VERSION = "source-document-v1";
+    static final String VERSION = "source-document-v2";
     static final String CHUNKER_VERSION = "line-character-v1";
     private final int maxCharacters;
     private final int javaMaxTokens;
@@ -25,7 +25,8 @@ final class SourceDocumentFactory {
     List<Document> create(SourceUnit unit) {
         if (unit.text().isBlank()) return List.of();
         boolean semanticJava = Boolean.TRUE.equals(unit.metadata().get("semantic_java"));
-        String header = semanticJava ? javaHeader(unit.metadata()) : header(unit.metadata());
+        boolean semanticXml = Boolean.TRUE.equals(unit.metadata().get("semantic_xml"));
+        String header = semanticJava ? javaHeader(unit.metadata()) : semanticXml ? xmlHeader(unit.metadata()) : header(unit.metadata());
         int budget = semanticJava ? javaMaxTokens - ConservativeTokenBudget.count(header) : maxCharacters - header.length();
         if (budget < (semanticJava ? 6 : 2)) throw new IllegalArgumentException("Source context header exceeds chunk budget");
         String sourceReference = snapshots.save(unit.fileId(), unit.source());
@@ -34,6 +35,12 @@ final class SourceDocumentFactory {
         String javaContext = javaContext(unit.metadata());
         String javaContextReference = javaContext.isBlank() ? null : snapshots.save(
                 SourceIdentity.uuid("java-context", unit.parentId()), javaContext);
+        String relationships = relationshipText(unit.metadata());
+        String relationshipReference = relationships.isBlank() ? null : snapshots.save(
+                SourceIdentity.uuid("relationships", unit.parentId()), relationships);
+        String contractContext = String.valueOf(unit.metadata().getOrDefault("contract_context", ""));
+        String contractReference = contractContext.isBlank() ? null : snapshots.save(
+                SourceIdentity.uuid("contract-context", unit.parentId()), contractContext);
         int[] lineStarts = lineStarts(unit.source());
         List<Document> documents = new ArrayList<>();
         int start = unit.startOffset();
@@ -51,7 +58,15 @@ final class SourceDocumentFactory {
                     end = semanticEnd > start ? semanticEnd : boundary(unit.source(), start, unit.endOffset(), hardEnd - start);
                 }
             }
-            else end = boundary(unit.source(), start, unit.endOffset(), budget);
+            else {
+                int hardEnd = (int) Math.min(unit.endOffset(), (long) start + budget);
+                int semanticEnd = start;
+                if (semanticXml && hardEnd < unit.endOffset()) for (int candidate : unit.boundaries()) {
+                    if (candidate > hardEnd) break;
+                    if (candidate > start) semanticEnd = candidate;
+                }
+                end = semanticEnd > start ? semanticEnd : boundary(unit.source(), start, unit.endOffset(), budget);
+            }
             String excerpt = unit.source().substring(start, end);
             int part = documents.size();
             String id = SourceIdentity.uuid("chunk", unit.parentId(), unit.chunkKind(), Integer.toString(part));
@@ -61,6 +76,11 @@ final class SourceDocumentFactory {
             metadata.remove("semantic_java");
             metadata.remove("imports");
             metadata.remove("member_signatures");
+            metadata.remove("semantic_xml");
+            metadata.remove("relationships");
+            metadata.remove("contract_context");
+            if (relationshipReference != null) metadata.put("relationships_snapshot", relationshipReference);
+            if (contractReference != null) metadata.put("contract_context_snapshot", contractReference);
             if (javaContextReference != null) metadata.put("java_context_snapshot", javaContextReference);
             metadata.put("chunk_id", id);
             metadata.put("parent_id", unit.parentId());
@@ -74,7 +94,7 @@ final class SourceDocumentFactory {
             metadata.put("end_line", lineAt(lineStarts, end - 1));
             metadata.put("start_offset", start);
             metadata.put("end_offset", end);
-            metadata.put("chunker_version", semanticJava ? "java-statement-token-v1" : CHUNKER_VERSION);
+            metadata.put("chunker_version", semanticJava ? "java-statement-token-v1" : semanticXml ? "xml-element-character-v1" : CHUNKER_VERSION);
             if (semanticJava) {
                 int estimate = ConservativeTokenBudget.count(header + excerpt);
                 if (estimate > javaMaxTokens) throw new IllegalStateException("Java chunk exceeds configured token bound");
@@ -113,6 +133,11 @@ final class SourceDocumentFactory {
         labels.put("group_id", "Group");
         labels.put("artifact_id", "Artifact");
         labels.put("version", "Version");
+        labels.put("resolved_version", "Local property version");
+        labels.put("dependency_scope", "Declared scope");
+        labels.put("profile", "Declared profile");
+        labels.put("dependency_model", "Dependency model");
+        labels.put("contract_context", "Contract context");
         StringBuilder header = new StringBuilder();
         labels.forEach((key, label) -> {
             Object value = metadata.get(key);
@@ -125,11 +150,40 @@ final class SourceDocumentFactory {
 
     private String javaHeader(Map<String, Object> metadata) {
         Map<String, Object> compact = new LinkedHashMap<>(metadata);
-        for (String field : List.of("signature", "annotations", "overview")) {
+        for (String field : List.of("signature", "annotations", "overview", "contract_context")) {
             Object value = compact.get(field);
             if (value != null) compact.put(field, ConservativeTokenBudget.abbreviate(value.toString(), Math.max(32, javaMaxTokens / 5)));
         }
         return header(compact);
+    }
+
+    private String xmlHeader(Map<String, Object> metadata) {
+        Map<String, Object> compact = new LinkedHashMap<>(metadata);
+        for (String field : List.of("namespace_uri", "element_qname", "service", "port_type", "operation", "soap_action",
+                "group_id", "artifact_id", "version", "resolved_version", "profile")) {
+            if (compact.containsKey(field)) compact.put(field, abbreviateCharacters(compact.get(field).toString(), Math.max(8, maxCharacters / 6)));
+        }
+        // Reserve half the character budget for the exact source; full context lives in a snapshot.
+        compact.remove("contract_context");
+        String essential = header(compact);
+        if (essential.length() >= maxCharacters - 2) {
+            compact.keySet().removeIf(key -> !List.of("repository_id", "module_id", "relative_path").contains(key));
+            essential = header(compact);
+        }
+        int available = Math.max(0, maxCharacters / 2 - essential.length() - "Contract context: \n".length());
+        if (available > 0 && metadata.containsKey("contract_context")) compact.put("contract_context", abbreviateCharacters(metadata.get("contract_context").toString(), available));
+        return header(compact);
+    }
+
+    private static String abbreviateCharacters(String value, int limit) {
+        if (value.length() <= limit) return value;
+        int end = Math.max(0, limit - 1);
+        if (end > 0 && Character.isHighSurrogate(value.charAt(end - 1))) end--;
+        return value.substring(0, end) + "…";
+    }
+
+    private static String relationshipText(Map<String, Object> metadata) {
+        return metadata.get("relationships") instanceof List<?> values ? String.join("\n", values.stream().map(Object::toString).toList()) : "";
     }
 
     private static String javaContext(Map<String, Object> metadata) {

@@ -40,11 +40,15 @@ public class SpringAiDocLoaderApplication {
 
     @Bean
     Function<Flux<DiscoveredFile>, Flux<SourceUnit>> documentReader(DiscoveryProperties properties,
-            JavaParsingProperties javaProperties, ChunkingProperties chunks) {
-        ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
+            XmlParsingProperties xmlProperties, JavaParsingProperties javaProperties, ChunkingProperties chunks) {
         JavaSourceReader javaReader = new JavaSourceReader(javaProperties, chunks);
-        return files -> files.concatMapIterable(file -> file.kind() == DiscoveredFile.FileKind.JAVA
-                ? javaReader.read(file) : List.of(readers.read(file)));
+        return files -> files.collectList().flatMapMany(all -> {
+            ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
+            XmlSourceReader xmlReader = new XmlSourceReader(xmlProperties, all);
+            List<SourceUnit> units = all.stream().flatMap(file -> (file.kind() == DiscoveredFile.FileKind.JAVA
+                    ? javaReader.read(file) : SourceText.isXml(file.kind()) ? xmlReader.read(file) : List.of(readers.read(file))).stream()).toList();
+            return Flux.fromIterable(ContractLinker.link(units));
+        });
     }
 
     @Bean

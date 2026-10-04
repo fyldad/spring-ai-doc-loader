@@ -16,6 +16,11 @@ file:
     encoding: UTF-8 # fallback; BOMs and XML encoding declarations take precedence
     report: build/reports/discovery.csv
 ingestion:
+  xml:
+    max-import-depth: 16
+    max-import-files: 128
+    element-names: [bean, route, endpoint]
+    maven-resolution-policy: declared
   chunks:
     max-characters: 1200 # includes context header; preserves exact source slices
     java-max-tokens: 800 # conservative UTF-8/NFKC bound, including the repeated header

@@ -12,8 +12,7 @@ final class ProjectDocumentReaders {
         redactor = new ConfigurationRedactor(properties.getSensitiveKeyPattern());
     }
 
-    // Discovery validates/redacts snapshots. Java AST extraction runs in documentReader;
-    // semantic XML extraction remains phase 5.
+    // Discovery validates/redacts snapshots; semantic extraction runs in documentReader.
     DiscoveredFile prepare(DiscoveredFile file) throws Exception {
         Map<String, Object> metadata = new LinkedHashMap<>(file.metadata());
         String text = switch (file.kind()) {

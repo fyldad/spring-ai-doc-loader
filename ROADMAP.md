@@ -32,7 +32,7 @@ The following phases are proposed work; they are not implemented by this documen
 
 ## 2. Discover projects and classify files correctly
 
-**Status: implemented.** See [DISCOVERY.md](DISCOVERY.md) for configuration, report semantics, and discovery limits. Java AST parsing is implemented in phase 4; semantic XML extraction remains phase 5.
+**Status: implemented.** See [DISCOVERY.md](DISCOVERY.md) for configuration, report semantics, and discovery limits. Java AST parsing and semantic XML extraction are implemented in phases 4 and 5.
 
 **Priority: foundational.** Replace the assumption that the first directory segment is the module with an explicit project inventory.
 
@@ -48,7 +48,7 @@ The following phases are proposed work; they are not implemented by this documen
 
 ## 3. Introduce a source and metadata contract
 
-**Status: implemented.** See [SOURCE_CONTRACT.md](SOURCE_CONTRACT.md) for structured units, stable identities, source snapshots, location semantics, document text, and payload indexes. Java readers now extract AST units; semantic XML fields remain phase 5. Configuration locations explicitly refer to sanitized snapshots when redaction changes formatting. Stale-part reconciliation remains phase 8.
+**Status: implemented.** See [SOURCE_CONTRACT.md](SOURCE_CONTRACT.md) for structured units, stable identities, source snapshots, location semantics, document text, and payload indexes. Java and XML readers extract semantic units. Configuration locations explicitly refer to sanitized snapshots when redaction changes formatting. Stale-part reconciliation remains phase 8.
 
 **Priority: before AST readers.** Separate an extracted source unit from the final Spring AI `Document`. Readers should return structured units; a shared document factory should create consistently formatted retrieval chunks.
 
@@ -109,6 +109,8 @@ Add symbol resolution progressively: source-only parsing first, source roots and
 **Done when:** representative methods, overloaded methods, records, nested types, and large methods produce useful chunks with correct source ranges. Failed parsing remains visible and searchable.
 
 ## 5. Add structure-aware XML, WSDL, XSD, and Maven readers
+
+**Status: implemented.** See [XML_CHUNKING.md](XML_CHUNKING.md) for secure parsing, lexical citations, bounded local imports, semantic units, Maven resolution policy, and inferred Java/contract links.
 
 **Priority: alongside Java AST work.** XML token windows can separate an operation from the types that explain it. Use namespace-aware parsing and semantic extraction.
 

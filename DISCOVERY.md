@@ -1,6 +1,8 @@
 # Project discovery configuration
 
-Section 2 of `ROADMAP.md` is implemented by the discovery supplier and reader routes. Files are classified and safely decoded before becoming structured source units; the shared factory then creates documents using the [source contract](SOURCE_CONTRACT.md).
+Section 2 of `ROADMAP.md` is implemented by the discovery supplier and reader routes.
+Files are classified and safely decoded before becoming structured source units;
+the shared factory then creates documents using the [source contract](SOURCE_CONTRACT.md).
 
 Prefer explicit repository IDs and roots in `application.yaml`:
 
@@ -28,7 +30,7 @@ IDs are independent of checkout location. Roots must be existing directories, ca
 
 Maven module identity uses the nearest included `pom.xml`, with a repository-relative module path (`.` for the root). Metadata includes declared coordinates, inherited parent group/version when present, declared child modules, and the containing parent module. Build source/resource roots and standard `src/main/java`, `src/test/java`, and resource roots are classified separately from Java package names. Discovery extracts a lightweight package hint; the Java AST reader replaces it during document extraction (see [JAVA_CHUNKING.md](JAVA_CHUNKING.md)). Maven profiles, remote parents, unresolved properties, and effective dependencies are not evaluated during discovery. `inventory_status` describes whether a POM was usable, and unresolved coordinates remain declared values.
 
-POM, WSDL, XSD, generic XML, Java, YAML, properties, and prose have separate reader routes. XML classification considers the root name and namespace, so a WSDL stored as `.xml` receives the WSDL route. Both WSDL 1.1 and 2.0 roots are recognized. XML DTDs/external entities are disabled, and no schema imports are fetched. Discovery retains full-file snapshots. Java now produces semantic AST chunks in `documentReader`; semantic XML/contract chunks remain roadmap step 5.
+POM, WSDL, XSD, generic XML, Java, YAML, properties, and prose have separate reader routes. XML classification considers the root name and namespace, so a WSDL stored as `.xml` receives the WSDL route. Both WSDL 1.1 and 2.0 roots are recognized. XML DTDs/external entities are disabled, and semantic imports are resolved only against the admitted repository inventory with depth, count, cycle, namespace, and repository-boundary checks. Discovery retains full-file snapshots. Java and XML produce semantic chunks in `documentReader`; see [XML_CHUNKING.md](XML_CHUNKING.md).
 
 Repository `.gitignore` files, nested overrides/negations, and local `.git/info/exclude` rules are applied with JGit. Existing Git index entries remain eligible even when they match ignore patterns. Machine-wide Git ignore settings are deliberately excluded so ingestion is reproducible across hosts. Configured directory/path exclusions still apply to tracked files. Excluded directories are pruned, and symlinks are skipped. Generated source paths, `@Generated` annotations, and generator comment markers produce `generated=true`; `exclude-generated` can suppress those files. Generated-source detection is heuristic and does not affect ranking automatically.
 

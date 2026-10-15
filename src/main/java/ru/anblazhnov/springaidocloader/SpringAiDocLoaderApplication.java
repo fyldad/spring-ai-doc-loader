@@ -7,6 +7,7 @@ import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
@@ -39,24 +40,35 @@ public class SpringAiDocLoaderApplication {
     }
 
     @Bean
-    Function<Flux<DiscoveredFile>, Flux<SourceUnit>> documentReader(DiscoveryProperties properties,
-            XmlParsingProperties xmlProperties, JavaParsingProperties javaProperties, ChunkingProperties chunks) {
+    Function<Flux<DiscoveredFile>, Flux<List<SourceUnit>>> documentReader(DiscoveryProperties properties,
+                                                                          XmlParsingProperties xmlProperties, JavaParsingProperties javaProperties, ChunkingProperties chunks) {
         JavaSourceReader javaReader = new JavaSourceReader(javaProperties, chunks);
-        return files -> files.collectList().flatMapMany(all -> {
-            ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
-            XmlSourceReader xmlReader = new XmlSourceReader(xmlProperties, all);
-            List<SourceUnit> units = all.stream().flatMap(file -> (file.kind() == DiscoveredFile.FileKind.JAVA
-                    ? javaReader.read(file) : SourceText.isXml(file.kind()) ? xmlReader.read(file) : List.of(readers.read(file))).stream()).toList();
-            return Flux.fromIterable(ContractLinker.link(units));
-        });
+        ProjectDocumentReaders readers = new ProjectDocumentReaders(properties);
+
+        return fileFlux ->
+                fileFlux.map(file -> {
+
+                    log.info("reading file: {}", file.path());
+
+                    XmlSourceReader xmlReader = new XmlSourceReader(xmlProperties, file);
+
+                    return file.kind() == DiscoveredFile.FileKind.JAVA
+                            ? javaReader.read(file)
+                            : SourceText.isXml(file.kind()) ? xmlReader.read(file) : List.of(readers.read(file));
+
+                });
     }
 
     @Bean
-    Function<Flux<SourceUnit>, Flux<List<Document>>> createDocuments(ChunkingProperties properties) {
-        SourceDocumentFactory factory = new SourceDocumentFactory(properties);
-        return units -> units
-                .map(factory::create)
-                .subscribeOn(Schedulers.boundedElastic());
+    Function<Flux<List<SourceUnit>>, Flux<List<Document>>> splitDocuments(ChunkingProperties properties) {
+
+        var splitter = TokenTextSplitter.builder().withChunkSize(properties.getMaxTokens()).build();
+        return documentFlux ->
+                documentFlux
+                        .map(units -> units.stream()
+                                .flatMap(unit -> splitter.split(new Document(unit.source(), unit.metadata())).stream())
+                                .toList())
+                        .subscribeOn(Schedulers.boundedElastic());
     }
 
     @Bean
@@ -76,10 +88,10 @@ public class SpringAiDocLoaderApplication {
             List<Document> batch) {
 
         return Mono.fromRunnable(() -> {
-            if (batch != null && !batch.isEmpty()) {
-                vectorStore.accept(batch);
-                log.info("Stored {} document chunks", batch.size());
-            }
+                    if (batch != null && !batch.isEmpty()) {
+                        vectorStore.accept(batch);
+                        log.info("Stored {} document chunks", batch.size());
+                    }
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .then();

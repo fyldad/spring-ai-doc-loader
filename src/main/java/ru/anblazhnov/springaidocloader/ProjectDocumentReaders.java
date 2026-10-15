@@ -37,7 +37,7 @@ final class ProjectDocumentReaders {
     }
 
     SourceUnit read(DiscoveredFile file) {
-        return new SourceUnit(file.text(), 0, file.text().length(), "file_excerpt", file.metadata());
+        return new SourceUnit(file.text(), "file_excerpt", file.metadata());
     }
 
     private String javaSource(DiscoveredFile file, Map<String, Object> metadata) {

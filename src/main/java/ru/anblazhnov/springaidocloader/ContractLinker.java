@@ -67,7 +67,7 @@ final class ContractLinker {
             if (metadata.get("relationships") instanceof List<?> existing) existing.forEach(value -> relationships.add(value.toString()));
             relationships.addAll(links.get(unit.parentId())); metadata.put("relationships", relationships.stream().distinct().toList());
             metadata.put("contract_context", metadata.getOrDefault("contract_context", "") + "; " + String.join("; ", contexts.get(unit.parentId())));
-            result.add(new SourceUnit(unit.source(), unit.startOffset(), unit.endOffset(), unit.chunkKind(), metadata, unit.boundaries()));
+            result.add(unit);
         }
         return List.copyOf(result);
     }

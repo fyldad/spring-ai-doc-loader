@@ -30,9 +30,9 @@ final class XmlSourceReader {
     }
     private record Scope(List<Parsed> files, List<String> diagnostics) { }
 
-    XmlSourceReader(XmlParsingProperties properties, List<DiscoveredFile> files) {
+    XmlSourceReader(XmlParsingProperties properties, DiscoveredFile file) {
         properties.validate(); this.properties = properties;
-        for (DiscoveredFile file : files) if (SourceText.isXml(file.kind())) {
+        if (SourceText.isXml(file.kind())) {
             Path key = file.path().toAbsolutePath().normalize();
             try { inventory.put(key, new Parsed(file, new LocatedXml(file.text()))); }
             catch (Exception error) { failures.put(key, error.getClass().getSimpleName()); }
@@ -40,7 +40,7 @@ final class XmlSourceReader {
     }
 
     List<SourceUnit> read(DiscoveredFile file) {
-        if (!SourceText.isXml(file.kind())) return List.of(new SourceUnit(file.text(), 0, file.text().length(), "file_excerpt", file.metadata()));
+        if (!SourceText.isXml(file.kind())) return List.of(new SourceUnit(file.text(), "file_excerpt", file.metadata()));
         Parsed parsed = inventory.get(file.path().toAbsolutePath().normalize());
         if (parsed == null) return fallback(file, "xml_fallback", "fallback",
                 failures.getOrDefault(file.path().toAbsolutePath().normalize(), "Unavailable source"));
@@ -60,7 +60,7 @@ final class XmlSourceReader {
         Map<String, Object> metadata = new LinkedHashMap<>(file.metadata());
         metadata.put("parser_version", VERSION); metadata.put("parse_status", status);
         metadata.put("parse_diagnostic", diagnostic); metadata.put("resolution_status", "not_attempted");
-        return List.of(new SourceUnit(file.text(), 0, file.text().length(), kind, metadata));
+        return List.of(new SourceUnit(file.text(), kind, metadata));
     }
 
     private Scope scope(Parsed source) {
@@ -147,19 +147,14 @@ final class XmlSourceReader {
         return metadata;
     }
 
-    private SourceUnit unit(Parsed parsed, Element element, String kind, Map<String, Object> metadata, boolean overview) {
-        LocatedXml.Range range = parsed.xml().range(element);
-        List<Integer> boundaries = LocatedXml.descendants(element).stream().flatMap(value -> {
-            LocatedXml.Range child = parsed.xml().range(value);
-            return java.util.stream.Stream.of(child.start(), child.openEnd(), child.end());
-        }).toList();
-        return new SourceUnit(parsed.file().text(), range.start(), overview ? range.openEnd() : range.end(), kind, metadata, boundaries);
+    private SourceUnit unit(Parsed parsed, String kind, Map<String, Object> metadata) {
+        return new SourceUnit(parsed.file().text(), kind, metadata);
     }
 
     private String parent(Declaration declaration) {
         Map<String, Object> metadata = base(declaration.parsed(), declaration.element(), "xsd_" + declaration.kind(),
                 declaration.element().getAttribute("name"), declaration.namespace());
-        return unit(declaration.parsed(), declaration.element(), "xsd_" + declaration.kind(), metadata, false).parentId();
+        return unit(declaration.parsed(), "xsd_" + declaration.kind(), metadata).parentId();
     }
 
     private List<SourceUnit> wsdl(Parsed parsed) {
@@ -171,13 +166,13 @@ final class XmlSourceReader {
         overview.put("wsdl_version", "1.1");
         overview.put("contract_context", "Services: " + names(root, WSDL, "service") + "; Port types: " + names(root, WSDL, "portType")
                 + "; Bindings: " + names(root, WSDL, "binding"));
-        units.add(unit(parsed, root, "wsdl_overview", overview, true));
+        units.add(unit(parsed, "wsdl_overview", overview));
         for (Element service : LocatedXml.children(root, WSDL, "service")) {
             Map<String, Object> metadata = base(parsed, service, "wsdl_service", service.getAttribute("name"), ns);
             metadata.put("service", service.getAttribute("name"));
             metadata.put("contract_context", LocatedXml.children(service, WSDL, "port").stream().map(port -> port.getAttribute("name") + " -> "
                     + LocatedXml.reference(port, port.getAttribute("binding"))).toList().toString());
-            units.add(unit(parsed, service, "wsdl_service", metadata, false));
+            units.add(unit(parsed, "wsdl_service", metadata));
         }
         for (Element port : LocatedXml.children(root, WSDL, "portType")) {
             for (Element operation : LocatedXml.children(port, WSDL, "operation")) {
@@ -222,12 +217,12 @@ final class XmlSourceReader {
                 if (!services.isEmpty()) metadata.put("service", String.join(", ", services.stream().distinct().toList()));
                 metadata.put("contract_context", String.join("; ", facts)); metadata.put("relationships", links);
                 if (facts.stream().anyMatch(value -> value.contains("unresolved"))) metadata.put("resolution_status", "partial");
-                units.add(unit(parsed, operation, "wsdl_operation", metadata, false));
+                units.add(unit(parsed, "wsdl_operation", metadata));
             }
         }
         for (Element element : LocatedXml.children(root)) if (Set.of("message", "binding", "import", "documentation").contains(element.getLocalName()) && WSDL.equals(LocatedXml.ns(element))) {
             var metadata = base(parsed, element, "wsdl_" + element.getLocalName(), element.getAttribute("name").isBlank() ? LocatedXml.path(element) : element.getAttribute("name"), ns);
-            units.add(unit(parsed, element, "wsdl_" + element.getLocalName(), metadata, false));
+            units.add(unit(parsed, "wsdl_" + element.getLocalName(), metadata));
         }
         units.addAll(schemaDeclarations(parsed));
         return List.copyOf(units);
@@ -262,7 +257,7 @@ final class XmlSourceReader {
         var metadata = base(parsed, root, "xsd_overview", "schema", root.getAttribute("targetNamespace"));
         metadata.put("contract_context", "elementFormDefault=" + defaultValue(root.getAttribute("elementFormDefault"), "unqualified")
                 + "; attributeFormDefault=" + defaultValue(root.getAttribute("attributeFormDefault"), "unqualified"));
-        List<SourceUnit> units = new ArrayList<>(); units.add(unit(parsed, root, "xsd_overview", metadata, true));
+        List<SourceUnit> units = new ArrayList<>(); units.add(unit(parsed, "xsd_overview", metadata));
         units.addAll(schemaDeclarations(parsed));
         return List.copyOf(units);
     }
@@ -305,7 +300,7 @@ final class XmlSourceReader {
                 metadata.put("resolution_status", scope(parsed).diagnostics().stream().allMatch(value -> value.equals("import_revisit_or_cycle")) ? "resolved_local" : "partial");
                 metadata.put("contract_context", String.join("; ", facts)); metadata.put("relationships", links.stream().distinct().toList());
                 if (facts.stream().anyMatch(value -> value.startsWith("unresolved"))) metadata.put("resolution_status", "partial");
-                units.add(unit(parsed, element, kind, metadata, false));
+                units.add(unit(parsed, kind, metadata));
             }
         }
         return units;
@@ -323,7 +318,7 @@ final class XmlSourceReader {
         overview.put("resolution_status", "declared"); overview.put("active_profiles", "none; profiles indexed as declarations");
         overview.put("contract_context", "Parent: " + coordinates(XmlSupport.child(root, "parent")) + "; Modules: "
                 + childrenText(XmlSupport.child(root, "modules")) + "; Properties: " + childrenText(XmlSupport.child(root, "properties")));
-        units.add(unit(parsed, root, "maven_overview", overview, true));
+        units.add(unit(parsed, "maven_overview", overview));
         Map<String, String> localProperties = new LinkedHashMap<>();
         Element props = XmlSupport.child(root, "properties");
         if (props != null) for (Element property : LocatedXml.children(props)) localProperties.put(property.getLocalName(), property.getTextContent().strip());
@@ -363,7 +358,7 @@ final class XmlSourceReader {
             }
             metadata.put("contract_context", "Declaration in profile " + metadata.get("profile") + "; dependencyManagement=" + management
                     + (metadata.containsKey("resolved_version") ? "; Local property version: " + metadata.get("resolved_version") : ""));
-            units.add(unit(parsed, element, kind, metadata, false));
+            units.add(unit(parsed, kind, metadata));
         }
         return List.copyOf(units);
     }
@@ -373,11 +368,11 @@ final class XmlSourceReader {
         for (Element element : LocatedXml.descendants(parsed.xml().root)) if (properties.getElementNames().contains(element.getLocalName())) {
             var metadata = base(parsed, element, "xml_element", LocatedXml.path(element), LocatedXml.ns(element));
             metadata.put("contract_context", "ID: " + element.getAttribute("id") + "; Name: " + element.getAttribute("name"));
-            units.add(unit(parsed, element, "xml_element", metadata, false));
+            units.add(unit(parsed, "xml_element", metadata));
         }
         if (units.isEmpty()) {
             Element root = parsed.xml().root;
-            units.add(unit(parsed, root, "xml_document", base(parsed, root, "xml_document", LocatedXml.path(root), LocatedXml.ns(root)), false));
+            units.add(unit(parsed, "xml_document", base(parsed, root, "xml_document", LocatedXml.path(root), LocatedXml.ns(root))));
         }
         return List.copyOf(units);
     }

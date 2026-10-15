@@ -62,6 +62,8 @@ final class ProjectDiscovery implements AutoCloseable {
                 walker = null;
                 continue;
             }
+            String pathStr = path.toString();
+            if (pathStr.contains("WEB-INF") || pathStr.contains("META-INF")) continue;
             Map<String, Object> metadata = new LinkedHashMap<>(inventory.metadata(path));
             metadata.putAll(revision);
             DiscoveredFile.FileKind kind = DiscoveredFile.FileKind.fromFilename(path);

@@ -87,11 +87,6 @@ final class JavaSourceReader {
     private List<SourceUnit> extract(DiscoveredFile file, CompilationUnit compilation) {
 
         Map<String, Object> base = new LinkedHashMap<>(file.metadata());
-//        base.put("parser_version", VERSION);
-//        base.put("parse_status", "parsed");
-//        base.put("java_language_level", properties.getLanguageLevel());
-//        base.put("resolution_status", properties.isResolveSymbols() ? "partial" : "not_attempted");
-//        base.put("semantic_java", true);
         base.remove("package");
         compilation.getPackageDeclaration().ifPresent(declaration -> base.put("package", declaration.getNameAsString()));
         List<String> imports = compilation.getImports().stream().map(Object::toString).map(String::strip).toList();

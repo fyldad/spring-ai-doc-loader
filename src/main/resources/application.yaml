@@ -12,6 +12,7 @@ file:
     excluded-path-parts: WEB-INF, META-INF, .gitlab-ci.yml
     respect-gitignore: true
     exclude-generated: false
+    exclude-tests: true
     max-file-size: 2097152 # bytes; bounds both discovery and the actual read
     encoding: UTF-8 # fallback; BOMs and XML encoding declarations take precedence
     report: build/reports/discovery.csv

@@ -15,6 +15,7 @@ public class DiscoveryProperties {
     private String filenameRegex = "(?i).*\\.(java|xml|wsdl|xsd|md|txt|yaml|yml|properties)";
     private String excludedDirectories = ".git,.gradle,.idea,build,target,node_modules";
     private String excludedPathParts = "WEB-INF, META-INF, .gitlab-ci.yml";
+    private Boolean excludeTests = false;
     private List<String> excludedPaths = new ArrayList<>();
     private boolean respectGitignore = true;
     private boolean excludeGenerated = false;
@@ -29,6 +30,14 @@ public class DiscoveryProperties {
 
     public void setExcludedPathParts(String excludedPathParts) {
         this.excludedPathParts = excludedPathParts;
+    }
+
+    public Boolean getExcludeTests() {
+        return excludeTests;
+    }
+
+    public void setExcludeTests(Boolean excludeTests) {
+        this.excludeTests = excludeTests;
     }
 
     public record Repository(String id, Path root) {

@@ -28,6 +28,7 @@ final class ProjectDiscovery implements AutoCloseable {
     private final Pattern filenames;
     private final Set<String> excludedDirectories;
     private final Set<String> excludedPathParts;
+    private final Boolean excludeTests;
     private final ProjectDocumentReaders readers;
     private final DiscoveryReport report;
     private int repositoryIndex;
@@ -48,6 +49,7 @@ final class ProjectDiscovery implements AutoCloseable {
                 .map(String::trim).filter(name -> !name.isEmpty()).collect(Collectors.toUnmodifiableSet());
         readers = new ProjectDocumentReaders(properties);
         report = new DiscoveryReport(properties.getReport());
+        excludeTests = properties.getExcludeTests();
     }
 
     DiscoveredFile next() {
@@ -61,6 +63,7 @@ final class ProjectDiscovery implements AutoCloseable {
             }
             String pathStr = path.toString();
             if (excludedPathParts.stream().anyMatch(pathStr::contains)) continue;
+            if (excludeTests && path.getFileName().endsWith("Test.java")) continue;
             Map<String, Object> metadata = new LinkedHashMap<>(inventory.metadata(path));
             metadata.putAll(revision);
             DiscoveredFile.FileKind kind = DiscoveredFile.FileKind.fromFilename(path);

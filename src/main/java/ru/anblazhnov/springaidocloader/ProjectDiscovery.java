@@ -27,9 +27,9 @@ final class ProjectDiscovery implements AutoCloseable {
     private final List<DiscoveryProperties.Repository> repositories;
     private final Pattern filenames;
     private final Set<String> excludedDirectories;
+    private final Set<String> excludedPathParts;
     private final ProjectDocumentReaders readers;
     private final DiscoveryReport report;
-    private final Path snapshotDirectory;
     private int repositoryIndex;
     private DiscoveryProperties.Repository repository;
     private RepositoryRules rules;
@@ -38,16 +38,13 @@ final class ProjectDiscovery implements AutoCloseable {
     private Map<String, Object> revision = Map.of();
 
     ProjectDiscovery(DiscoveryProperties properties) throws IOException {
-        this(properties, new ChunkingProperties().getSnapshotDirectory());
-    }
-
-    ProjectDiscovery(DiscoveryProperties properties, Path snapshotDirectory) throws IOException {
         properties.validate();
-        this.snapshotDirectory = snapshotDirectory.toAbsolutePath().normalize();
         this.properties = properties;
         repositories = repositories(properties);
         filenames = Pattern.compile(properties.getFilenameRegex());
         excludedDirectories = Arrays.stream(properties.getExcludedDirectories().split(","))
+                .map(String::trim).filter(name -> !name.isEmpty()).collect(Collectors.toUnmodifiableSet());
+        excludedPathParts = Arrays.stream(properties.getExcludedPathParts().split(","))
                 .map(String::trim).filter(name -> !name.isEmpty()).collect(Collectors.toUnmodifiableSet());
         readers = new ProjectDocumentReaders(properties);
         report = new DiscoveryReport(properties.getReport());
@@ -63,7 +60,7 @@ final class ProjectDiscovery implements AutoCloseable {
                 continue;
             }
             String pathStr = path.toString();
-            if (pathStr.contains("WEB-INF") || pathStr.contains("META-INF")) continue;
+            if (excludedPathParts.stream().anyMatch(pathStr::contains)) continue;
             Map<String, Object> metadata = new LinkedHashMap<>(inventory.metadata(path));
             metadata.putAll(revision);
             DiscoveredFile.FileKind kind = DiscoveredFile.FileKind.fromFilename(path);
@@ -122,8 +119,7 @@ final class ProjectDiscovery implements AutoCloseable {
             if (attributes.isSymbolicLink()) reason = "symbolic_link";
             else if (attributes.isDirectory() && excludedDirectories.contains(path.getFileName().toString())) reason = "configured_directory";
             else if (path.toAbsolutePath().normalize().equals(properties.getReport().toAbsolutePath().normalize())) reason = "discovery_report";
-            else if (path.toAbsolutePath().normalize().startsWith(snapshotDirectory)) reason = "source_snapshots";
-        else reason = rules.exclusion(path, attributes.isDirectory());
+            else reason = rules.exclusion(path, attributes.isDirectory());
             if (reason == null && !attributes.isDirectory()) {
                 if (!attributes.isRegularFile()) reason = "not_regular_file";
                 else if (!filenames.matcher(path.getFileName().toString()).matches()) reason = "filename_filter";

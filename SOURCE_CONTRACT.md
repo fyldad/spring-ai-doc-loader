@@ -6,7 +6,7 @@ Roadmap section 3 is implemented. The Spring Cloud Function composition is now:
 fileTreeSupplier -> documentReader -> createDocuments -> vectorStoreWriter
 ```
 
-Discovery validates and redacts files before emitting them. `documentReader` returns structured `SourceUnit`s, not Spring AI `Document`s. Each unit contains a full decoded source snapshot, an exclusive character range, a chunk kind, source metadata, and optional semantic boundaries. Java emits AST units with optional local symbol resolution as documented in [JAVA_CHUNKING.md](JAVA_CHUNKING.md). WSDL, XSD, Maven, and configured XML readers emit namespace-aware semantic units as documented in [XML_CHUNKING.md](XML_CHUNKING.md). Remaining readers emit whole-file units with `chunk_kind=file_excerpt`. Java symbol units require both `symbol_id` and `signature`, including parameter types to distinguish overloads.
+Discovery validates and redacts files before emitting them. `documentReader` returns structured `SourceUnit`s, not Spring AI `Document`s. Each unit contains decoded source text, an exclusive character range, a chunk kind, source metadata, and optional semantic boundaries. Java emits AST units with optional local symbol resolution as documented in [JAVA_CHUNKING.md](JAVA_CHUNKING.md). WSDL, XSD, Maven, and configured XML readers emit namespace-aware semantic units as documented in [XML_CHUNKING.md](XML_CHUNKING.md). Remaining readers emit whole-file units with `chunk_kind=file_excerpt`. Java symbol units require both `symbol_id` and `signature`, including parameter types to distinguish overloads.
 
 `SourceDocumentFactory` slices units verbatim, prefers complete lines, and splits oversized lines without breaking CRLF or Unicode surrogate pairs. It repeats a small factual context header on each part. The budget includes that header:
 
@@ -15,7 +15,6 @@ ingestion:
   chunks:
     max-characters: 1200
     java-max-tokens: 800
-    snapshot-directory: .ingestion/source-snapshots
   qdrant:
     payload-indexes: true
 ```
@@ -31,16 +30,14 @@ The factory preserves applicable discovery/reader fields and adds typed, flat ch
 | `repository_id`, `module_id`, `relative_path`, `language`, `file_kind`, `source_set` | Portable identity and filtering; no checkout path in the vector payload |
 | `revision`, `dirty_worktree`, `revision_status` | Git HEAD and repository-wide status sampled when the repository scan starts. `revision_status` is `available`, `unborn`, `unversioned`, or `unavailable`; unknown values are omitted rather than invented |
 | `file_hash` | SHA-256 of the original bytes read, including BOM; captured before redaction |
-| `snapshot_hash` | SHA-256 of the UTF-8 encoding of decoded/sanitized snapshot text |
 | `chunk_hash` | SHA-256 of the exact header plus excerpt that is stored and embedded |
 | `chunk_id`, `parent_id`, `chunk_kind`, `part_index`, `part_count` | Deterministic UUID point ID, logical parent, retrieval unit kind, and zero-based part number/count |
-| `start_line`, `end_line` | Inclusive, one-based lines in the source snapshot; header lines never count |
+| `start_line`, `end_line` | Inclusive, one-based lines in the decoded source; header lines never count |
 | `start_offset`, `end_offset` | Zero-based UTF-16 character offsets, with an exclusive end, matching Java `String.substring` |
-| `source_snapshot`, `parent_snapshot` | Portable references to the full source and the parent unit excerpt outside Qdrant |
 | `parser_version`, `chunker_version`, `document_format_version` | Non-Java: `full-file-reader-v1`, `line-character-v1`; Java: `javaparser-3.28.0-java-reader-v1`, `java-statement-token-v1`; format: `source-document-v1` |
 | `parse_status`, `resolution_status`, `generated`, `content_origin`, `location_basis` | Validation/provenance; Java reports `parsed` or `fallback`, and `resolved`, `partial` or `not_attempted` resolution; full-file readers report `validated` for XML/YAML or `text_only` otherwise |
 
-Applicable Java (`package`, `type_fqn`, `symbol_id`, `signature`, `annotations`, `visibility`), XML/SOAP (`namespace_uri`, `element_qname`, `xml_path`, `service`, `port_type`, `operation`, `soap_action`), and Maven fields remain reader-owned. The factory does not fabricate semantic fields. Java AST extraction replaces package hints and adds type/member metadata. Discovery provides root namespaces and declared Maven coordinates. `declared_modules` remains in the discovery inventory and is omitted from individual vector payloads. Java imports/member inventories are stored in `java_context_snapshot`; contract facts and relationships use `contract_context_snapshot` and `relationships_snapshot`. Each relationship line records relation, target parent ID, evidence quality (`declared` or `inferred`), and reference/evidence, separated by `|`. Content-addressed references retain historical facts; stale relationship reconciliation remains phase 8.
+Applicable Java (`package`, `type_fqn`, `symbol_id`, `signature`, `annotations`, `visibility`), XML/SOAP (`namespace_uri`, `element_qname`, `xml_path`, `service`, `port_type`, `operation`, `soap_action`), and Maven fields remain reader-owned. The factory does not fabricate semantic fields. Java AST extraction replaces package hints and adds type/member metadata. Discovery provides root namespaces and declared Maven coordinates. `declared_modules` remains in the discovery inventory and is omitted from individual vector payloads. Relationship facts remain reader-owned metadata; stale relationship reconciliation remains phase 8.
 
 ## Identity and parent lookup
 
@@ -48,11 +45,9 @@ Logical file identity uses the configured repository ID, module ID, and portable
 
 An unchanged rerun uses the same IDs. Content edits update hashes and overwrite the same point IDs for surviving parts. Changed split boundaries can leave obsolete points; removal of obsolete parts, deleted files, and failed-run reconciliation belongs to phase 8. Prefer a fresh collection when migrating an existing random-ID index to this contract.
 
-The snapshot store writes full sources and parent excerpts to `<snapshot-directory>/<logical-parent-uuid>/<sha256>.txt` in UTF-8, using atomic replacement. Existing content hashes remain available after edits. It stores only sanitized text for transformed configuration; original secrets are not copied into the snapshot store. Snapshot lookup validates the reference and content hash. The default `.ingestion/source-snapshots` directory is ignored by Git and survives Gradle `clean`. Keep this directory with the vector collection; source and parent lookup fail if the referenced artifacts are missing. The configured snapshot subtree is excluded from discovery, even when it is inside an indexed repository.
+Offsets and line numbers refer to the decoded source text carried by the current ingestion unit. `parent_id` identifies a logical unit without inferring an enclosing file or symbol from text.
 
-Given a retrieved document, read `source_snapshot` through `SourceSnapshotStore.read`, then slice the returned string at `[start_offset, end_offset)` (or use `SourceSnapshotStore.excerpt`). This reproduces the stored excerpt exactly. Read `parent_snapshot` to obtain the complete parent unit; `parent_id` identifies that unit without inferring an enclosing file or symbol from text. Current file parents are stored outside the vector store, so vector lookup by `parent_id` is not required.
-
-For `location_basis=original_source`, display `repository_id:relative_path:start_line-end_line` with the revision and file hash. The retained decoded text supplies the exact indexed excerpt even after the worktree changes. For `location_basis=sanitized_snapshot`, label the citation as a sanitized snapshot and include its reference: configuration serialization changes formatting, so these numbers cannot be used to locate the original-file lines. `content_origin=sanitized_source` makes this distinction filterable.
+For `location_basis=original_source`, display `repository_id:relative_path:start_line-end_line` with the revision and file hash. For `location_basis=sanitized_snapshot`, label the citation as sanitized content: configuration serialization changes formatting, so these numbers cannot be used to locate the original-file lines. `content_origin=sanitized_source` makes this distinction filterable.
 
 ## Embedding and Qdrant behavior
 
@@ -64,4 +59,4 @@ Java ingestion configures `spring.ai.ollama.embedding.truncate=false`. A compati
 
 When both `ingestion.qdrant.payload-indexes=true` and `spring.ai.vectorstore.qdrant.initialize-schema=true`, an ordered startup runner creates keyword indexes for `repository_id`, `module_id`, `language`, and `chunk_kind` in the configured Qdrant collection before ingestion starts. Index requests wait for completion and use a 30-second RPC timeout. If schema initialization is disabled, provision these indexes externally or explicitly enable schema initialization. Tests mock Qdrant; no live Qdrant/Ollama service is required.
 
-Run `./gradlew.bat test` on Windows. Tests cover pipeline composition, exact excerpts and source lines, CRLF/bare-CR/Unicode splitting, overload and split-parent identities, repeated runs and edits, original-byte hashes and Git provenance, sanitized snapshots, snapshot exclusion/integrity, embedding text, and payload-index requests.
+Run `./gradlew.bat test` on Windows. Tests cover pipeline composition, exact excerpts and source lines, CRLF/bare-CR/Unicode splitting, overload and split-parent identities, repeated runs and edits, original-byte hashes and Git provenance, sanitized content, embedding text, and payload-index requests.

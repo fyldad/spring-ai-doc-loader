@@ -12,7 +12,7 @@ final class ProjectDocumentReaders {
         redactor = new ConfigurationRedactor(properties.getSensitiveKeyPattern());
     }
 
-    // Discovery validates/redacts snapshots; semantic extraction runs in documentReader.
+    // Discovery validates and redacts content; semantic extraction runs in documentReader.
     DiscoveredFile prepare(DiscoveredFile file) throws Exception {
         Map<String, Object> metadata = new LinkedHashMap<>(file.metadata());
         String text = switch (file.kind()) {

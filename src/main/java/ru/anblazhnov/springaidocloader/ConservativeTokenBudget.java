@@ -5,7 +5,6 @@ import java.text.Normalizer;
 
 /** A deliberately pessimistic bound for byte/subword tokenizers, including normalization. */
 final class ConservativeTokenBudget {
-    static final String VERSION = "utf8-nfkc-bound-v1";
 
     static int count(String text) {
         return Math.max(text.getBytes(StandardCharsets.UTF_8).length,

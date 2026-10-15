@@ -1,8 +1,6 @@
 package ru.anblazhnov.springaidocloader;
 
-import java.util.Collections;
 import java.util.Map;
-import java.util.List;
 
 record SourceUnit(String source, String chunkKind, Map<String, Object> metadata) {
 

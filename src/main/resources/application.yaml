@@ -9,7 +9,7 @@ file:
     #     root: C:\projects\customer-services
     filename-regex: (?i).*\.(java|xml|wsdl|xsd|md|txt|yaml|yml|properties)
     excluded-directories: .git,.gradle,.idea,build,target,node_modules
-    excluded-paths: [] # Git-style patterns, relative to each repository root
+    excluded-path-parts: WEB-INF, META-INF, .gitlab-ci.yml
     respect-gitignore: true
     exclude-generated: false
     max-file-size: 2097152 # bytes; bounds both discovery and the actual read

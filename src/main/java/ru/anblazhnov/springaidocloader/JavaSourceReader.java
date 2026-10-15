@@ -26,7 +26,7 @@ import org.springframework.ai.tokenizer.JTokkitTokenCountEstimator;
 import org.springframework.ai.tokenizer.TokenCountEstimator;
 
 /**
- * Parses the indexed snapshot once; AST nodes are used only to select original source ranges.
+ * Parses each indexed source once; AST nodes are used only to select original source ranges.
  */
 final class JavaSourceReader {
     static final String VERSION = "javaparser-3.28.0-java-reader-v2";
@@ -85,48 +85,21 @@ final class JavaSourceReader {
     }
 
     private List<SourceUnit> extract(DiscoveredFile file, CompilationUnit compilation) {
-//        List<SourceUnit> units = new ArrayList<>();
-//        List<ClassOrInterfaceDeclaration> classes = compilation.findAll(ClassOrInterfaceDeclaration.class);
-//
-//        for (ClassOrInterfaceDeclaration classDecl : classes) {
-//            String className = classDecl.getNameAsString();
-//
-//            List<MethodDeclaration> methods = classDecl.findAll(MethodDeclaration.class);
-//            for (MethodDeclaration method : methods) {
-//
-//                // Формируем контент: добавляем имя класса для лучшего контекста LLM
-//                String methodCode = method.toString();
-//                String chunkText = String.format("// Class: %s\n%s", className, methodCode);
-//
-//                // Обогащаем метаданными для фильтрации в векторной БД
-//                Map<String, Object> metadata = new HashMap<>();
-//                metadata.put("file_name", file.path().toString());
-//                metadata.put("class_name", className);
-//                metadata.put("method_name", method.getNameAsString());
-//
-//                units.add(new SourceUnit(chunkText, metadata));
-//            }
-//        }
-//        return units;
-
 
         Map<String, Object> base = new LinkedHashMap<>(file.metadata());
-        base.put("parser_version", VERSION);
-        base.put("parse_status", "parsed");
-        base.put("java_language_level", properties.getLanguageLevel());
-        base.put("resolution_status", properties.isResolveSymbols() ? "partial" : "not_attempted");
-        base.put("semantic_java", true);
+//        base.put("parser_version", VERSION);
+//        base.put("parse_status", "parsed");
+//        base.put("java_language_level", properties.getLanguageLevel());
+//        base.put("resolution_status", properties.isResolveSymbols() ? "partial" : "not_attempted");
+//        base.put("semantic_java", true);
         base.remove("package");
         compilation.getPackageDeclaration().ifPresent(declaration -> base.put("package", declaration.getNameAsString()));
         List<String> imports = compilation.getImports().stream().map(Object::toString).map(String::strip).toList();
+        List<String> fields = new ArrayList<>();
         base.put("imports", imports);
         if (!resolverDiagnostics.isEmpty()) base.put("resolution_diagnostic", String.join("; ", resolverDiagnostics));
         List<SourceUnit> units = new ArrayList<>();
-        // Retain license/package/import context as a separate searchable unit.
-//        int firstType = compilation.getTypes().stream().mapToInt(type -> offsets.start(type, true)).min().orElse(file.text().length());
-//        if (firstType > 0) units.add(new SourceUnit(file.text(), 0, firstType, "java_file_context", base));
         for (TypeDeclaration<?> type : compilation.findAll(TypeDeclaration.class)) {
-
 
             if (tokenCountEstimator.estimate(type.toString()) < contextBudget) {
                 units.add(new SourceUnit(type.toString(), "java_file_context", base));
@@ -136,10 +109,9 @@ final class JavaSourceReader {
             String fqn = type.getFullyQualifiedName().orElseGet(() -> qualifiedName(type, base));
             Map<String, Object> typeMetadata = metadata(base, type, fqn, fqn, type.getNameAsString());
 
-            List<FieldDeclaration> fields = new ArrayList<>();
             for (BodyDeclaration<?> member : type.getMembers()) {
                 if (member instanceof FieldDeclaration field) {
-                    fields.add(field);
+                    fields.add(field.toString());
                 } else if (member instanceof CallableDeclaration<?> callable) {
                     String name = callable instanceof ConstructorDeclaration ? "<init>" : callable.getNameAsString();
                     String parameters = callable.getParameters().stream()
@@ -159,8 +131,11 @@ final class JavaSourceReader {
                     units.add(new SourceUnit(enumeration.toString(), "java_enum_constants", metadata));
                 }
             }
-            units.add(new SourceUnit("fields:" + fields.stream().map(String::valueOf).collect(Collectors.joining(";")), base));
         }
+        if (!fields.isEmpty()) {
+            base.put("fields", fields);
+        }
+
 
         return units.stream()
                 .filter(u -> u.source() != null && !u.source().isBlank())

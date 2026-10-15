@@ -13,9 +13,9 @@ import reactor.core.scheduler.Schedulers;
 public class FileSourceConfiguration {
 
     @Bean
-    Supplier<Flux<DiscoveredFile>> fileTreeSupplier(DiscoveryProperties properties, ChunkingProperties chunks) {
+    Supplier<Flux<DiscoveredFile>> fileTreeSupplier(DiscoveryProperties properties) {
         return () -> Flux.generate(
-                        () -> new ProjectDiscovery(properties, chunks.getSnapshotDirectory()),
+                        () -> new ProjectDiscovery(properties),
                         (discovery, sink) -> {
                             DiscoveredFile file = discovery.next();
                             if (file == null) {

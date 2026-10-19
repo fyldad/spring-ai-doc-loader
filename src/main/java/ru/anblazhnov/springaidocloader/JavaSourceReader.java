@@ -33,14 +33,12 @@ final class JavaSourceReader {
     private static final Logger log = LoggerFactory.getLogger(JavaSourceReader.class);
     private final JavaParser parser;
     private final ReflectionTypeSolver jdkTypes = new ReflectionTypeSolver();
-    private final JavaParsingProperties properties;
     private final int contextBudget;
     private final List<String> resolverDiagnostics = new ArrayList<>();
     private final TokenCountEstimator tokenCountEstimator;
 
     JavaSourceReader(JavaParsingProperties properties, ChunkingProperties chunks) {
         this.tokenCountEstimator = new JTokkitTokenCountEstimator();
-        this.properties = properties;
         chunks.validate();
         contextBudget = chunks.getMaxTokens();
         ParserConfiguration configuration = new ParserConfiguration()
@@ -116,8 +114,8 @@ final class JavaSourceReader {
                     Map<String, Object> metadata = metadata(typeMetadata, callable, fqn, symbol, null);
                     List<Type> usedTypes = new ArrayList<>(callable.getParameters().stream().map(Parameter::getType).toList());
                     if (callable instanceof MethodDeclaration method) usedTypes.add(method.getType());
-                    units.add(new SourceUnit(member.toString(), "java_method", metadata));
-                    units.add(new SourceUnit("usedTypes:" + usedTypes.stream().map(String::valueOf).collect(Collectors.joining(";")), base));
+                    String usedTypesStr = "usedTypes:" + usedTypes.stream().map(String::valueOf).collect(Collectors.joining(";"));
+                    units.add(new SourceUnit(usedTypesStr+"method:"+member, "java_method", metadata));
                 } else if (!(member instanceof TypeDeclaration<?>)) {
                     var metadata = metadata(typeMetadata, member, fqn);
                     units.add(new SourceUnit(member.toString(), "java_member", metadata));

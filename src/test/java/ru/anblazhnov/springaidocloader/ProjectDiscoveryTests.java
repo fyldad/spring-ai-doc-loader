@@ -210,7 +210,8 @@ class ProjectDiscoveryTests {
         write(root, "One.java", "class One {}");
         write(root, "Two.java", "class Two {}");
         DiscoveryProperties properties = properties(root);
-        new FileSourceConfiguration().fileTreeSupplier(properties).get().take(1).blockLast();
+        new FileSourceConfiguration().fileTreeSupplier(properties,
+                new LoadedFileState(temporary.resolve("loaded.txt"), "settings")).get().take(1).blockLast();
         // A move fails on Windows if the report writer is still open.
         Files.move(properties.getReport(), temporary.resolve("closed.csv"));
     }

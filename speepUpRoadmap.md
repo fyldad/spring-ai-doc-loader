@@ -1,0 +1,10 @@
+| Change                     | Why it helps                                                                                                                                                                                                                  |
+|----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Batch chunks across files  | Flatten the file lists and collect batches— start with 32 chunks. This reduces overhead from many small embedding requests and Qdrant writes.                                                                                 |
+| Try two concurrent batches | Replace concatMap with bounded flatMap. Benchmark concurrency 1, 2, and 4; higher concurrency can slow things down if Ollama already saturates your hardware.                                                                 |
+| Skip unchanged files       | Discovery already calculates file_hash, but every run embeds everything again. Persist successful indexing state, including the model and chunking configuration.                                                             |
+| Buffer discovery reports   | DiscoveryReport.java:39 (/C:/Users/User/IdeaProjects/spring-ai-doc-loader/src/main/java/ru/anblazhnov/springaidocloader/DiscoveryReport.java:39) flushes after every row. Periodic flushing would reduce filesystem overhead. |
+
+Also, Java parsing is explicitly synchronized, so parallelizing file reading alone won’t parallelize that stage.
+
+My first change would be configurable batch size and write concurrency, plus timing metrics. Measure parsing, embedding, and Qdrant writes separately before tuning further. Embedding is a likely bottleneck, but I haven’t benchmarked your running setup.

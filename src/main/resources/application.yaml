@@ -1,7 +1,7 @@
 server.port: 0
 file:
   supplier:
-    directory: C:\Users\WebUser\IdeaProjects
+    directory: C:\Users\User\IdeaProjects
     # Prefer explicit IDs/roots when indexing named repositories. When this list is
     # absent, directory accepts a project root or a folder of project directories.
     # repositories:
@@ -17,6 +17,10 @@ file:
     encoding: UTF-8 # fallback; BOMs and XML encoding declarations take precedence
     report: build/reports/discovery.csv
 ingestion:
+  writer:
+    state-file: loaded.txt # successful file checkpoints; delete to force a full reload
+    batch-size: 32 # chunks per write, combined across files; final partial batch is also written
+    concurrency: 2 # maximum simultaneous embedding/storage calls; use 1 for serial writes
   xml:
     max-import-depth: 16
     max-import-files: 128

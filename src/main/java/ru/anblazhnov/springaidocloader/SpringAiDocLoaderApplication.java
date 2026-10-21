@@ -53,7 +53,7 @@ public class SpringAiDocLoaderApplication {
         return fileFlux ->
                 fileFlux.filter(file -> {
                     boolean loaded = loadedState.isLoaded(loadedState.checkpoint(file));
-                    if (loaded) log.debug("Skipping unchanged file: {}", file.path());
+                    if (loaded) log.info("Skipping unchanged file: {}", file.path());
                     return !loaded;
                 }).map(file -> {
 
